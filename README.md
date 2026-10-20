@@ -95,3 +95,9 @@ venv/bin/python -m unittest discover -s tests -v
 ```
 
 As prévias locais em `previews/` não são versionadas.
+
+## Testes e hardening
+
+Os limites configuráveis de uploads, ZIPs e consultas, as mudanças de segurança,
+os requisitos da suíte ampliada e as pendências estão em
+[TER-2 — testes e hardening](docs/hardening.md).

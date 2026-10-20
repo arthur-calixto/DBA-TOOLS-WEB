@@ -10,6 +10,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.platypus.tableofcontents import TableOfContents
 
 from app.pdf_guidance import GUIAS
+from app.config import settings
 
 COR_ACCENT = colors.HexColor("#0f766e")
 COR_ALERTA = colors.HexColor("#fee2e2")
@@ -18,6 +19,36 @@ COR_INDEFINIDO = colors.HexColor("#f1f5f9")
 LARGURA = A4[0] - 3.2 * cm
 LIMITE_CELULA = 350
 STATUS = {"ok": "Dentro da referência", "alerta": "Revisar", "indefinido": "Sem referência"}
+
+
+class ReportLimitExceeded(ValueError):
+    pass
+
+
+def _check_render_budget(checks_meta, resultados):
+    """Limita a matriz de evidências antes de alocar objetos ReportLab.
+
+    A união das colunas pode expandir muito um JSON esparso. Contamos também as
+    células vazias e os cabeçalhos, inclusive quando os registros viram fichas.
+    """
+    cells = 0
+    for check in checks_meta:
+        cid = check["id"]
+        rows = resultados.get(cid)
+        if resultados.get(f"{cid}_erro") or not rows:
+            continue
+        columns = set()
+        for row in rows:
+            columns.update(row)
+            if len(columns) > settings.report_max_cells:
+                raise ReportLimitExceeded()
+        count = len(columns)
+        if cid == "acoes_agendadas" or count <= 6:
+            cells += (len(rows) + 1) * count
+        else:
+            cells += len(rows) * (2 * count + 2)
+        if cells > settings.report_max_cells:
+            raise ReportLimitExceeded()
 
 ROTULOS = {
     "PARAMETRO": "Parâmetro", "ESPERADO": "Referência", "ATUAL": "Valor encontrado",
@@ -165,6 +196,7 @@ def _evidencias(rows, styles, check_id=None):
 
 def gerar_relatorio_pdf(cliente_id, db_type, checks_meta, resultados):
     """Gera relatório com navegação e textos curtos, sem novas consultas ao banco."""
+    _check_render_budget(checks_meta, resultados)
     buffer = io.BytesIO()
     doc = RelatorioDoc(buffer, pagesize=A4, topMargin=1.8 * cm, bottomMargin=1.8 * cm,
                        leftMargin=1.6 * cm, rightMargin=1.6 * cm,
