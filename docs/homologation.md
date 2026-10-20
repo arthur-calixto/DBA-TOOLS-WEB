@@ -22,9 +22,11 @@ Configure como variables do GitHub Actions:
 - `HML_DATA_DIR`: caminho absoluto do diretório de dados sintéticos.
 - `HML_COMPOSE_PROJECT_NAME`: nome exclusivo, por exemplo `analise-hml`.
 
-Configure como secret próprio `HML_GHCR_TOKEN`, com permissão mínima de leitura
-do pacote. Nunca reutilize o `.env`, diretório de dados ou credenciais de
-produção.
+O workflow usa o `GITHUB_TOKEN` nativo (`${{ github.token }}`) para publicar e
+baixar a imagem no GHCR. As permissões são `packages: write` no job de build e
+`packages: read` no job de deploy. Não é necessário criar token pessoal ou
+secret adicional. Nunca reutilize o `.env`, diretório de dados ou credenciais
+de produção.
 
 ## Preparação da VM
 
@@ -37,7 +39,7 @@ diretórios automaticamente.
 ## Primeiro deploy
 
 1. Confirme que a VM não possui outro container chamado `analise-ambiente-hml`.
-2. Configure as três variables e o secret do environment `homologation`.
+2. Configure as três variables do environment `homologation`.
 3. Abra `Deploy de homologação` em Actions, selecione `develop` e informe o
    SHA completo de um commit ancestral de `origin/develop`.
 4. O workflow executará os testes, construirá a imagem e publicará o digest no

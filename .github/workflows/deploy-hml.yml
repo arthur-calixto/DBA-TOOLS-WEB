@@ -50,7 +50,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ github.token }}
       - uses: docker/build-push-action@v6
         id: build
         with:
@@ -85,7 +85,7 @@ jobs:
         run: echo "DOCKER_CONFIG=$RUNNER_TEMP/docker-auth-hml-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
       - name: Autenticar no GHCR
         env:
-          GHCR_TOKEN: ${{ secrets.HML_GHCR_TOKEN }}
+          GHCR_TOKEN: ${{ github.token }}
         run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
       - name: Atualizar homologação
         run: bash scripts/deploy-hml.sh
