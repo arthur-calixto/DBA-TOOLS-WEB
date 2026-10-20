@@ -109,6 +109,7 @@
 
     </main>
 
+    <script src="/static/safe-html.js"></script>
     <script>
 
         const btn = document.getElementById("btn-analisar");
@@ -144,11 +145,11 @@
 
                 html += `
                     <tr>
-                        <td>${row.ID}</td>
-                        <td>${row.TEMPO_MS}</td>
-                        <td>${row.APPLICATION}</td>
-                        <td>${row.RESOURCE_ID}</td>
-                        <td class="sql">${row.SQL}</td>
+                        <td>${escapeHTML(row.ID)}</td>
+                        <td>${escapeHTML(row.TEMPO_MS)}</td>
+                        <td>${escapeHTML(row.APPLICATION)}</td>
+                        <td>${escapeHTML(row.RESOURCE_ID)}</td>
+                        <td class="sql">${escapeHTML(row.SQL)}</td>
                         <td>
                             <button
                                 type="button"
@@ -286,15 +287,15 @@
                     <div class="contagem-card">
 
                         <div class="titulo">
-                            ${row.TITULO}
+                            ${escapeHTML(row.TITULO)}
                         </div>
 
                         <div class="numero">
-                            ${row.CONTAGEM}
+                            ${escapeHTML(row.CONTAGEM)}
                         </div>
 
                         <div class="detalhe">
-                            ${row.DETALHE}
+                            ${escapeHTML(row.DETALHE)}
                         </div>
 
                     </div>
@@ -367,11 +368,11 @@
                 /*
                  * Trata erro retornado pelo backend
                  */
-                if (data.erro) {
+                if (!resp.ok || data.erro) {
 
                     resultadoDiv.innerHTML = `
                         <p class="erro">
-                            ${data.erro}
+                            ${escapeHTML(data.erro || "Não foi possível analisar o arquivo.")}
                         </p>
                     `;
 
@@ -387,7 +388,7 @@
                             <div class="stat">
 
                                 <div class="numero">
-                                    ${data.total_registros}
+                                    ${escapeHTML(data.total_registros)}
                                 </div>
 
                                 <div class="label">
@@ -400,7 +401,7 @@
                             <div class="stat">
 
                                 <div class="numero">
-                                    ${data.tempo_total_ms}
+                                    ${escapeHTML(data.tempo_total_ms)}
                                 </div>
 
                                 <div class="label">
@@ -452,7 +453,7 @@
 
                 resultadoDiv.innerHTML = `
                     <p class="erro">
-                        Falha ao analisar: ${e}
+                        Falha ao analisar o arquivo. Tente novamente.
                     </p>
                 `;
 

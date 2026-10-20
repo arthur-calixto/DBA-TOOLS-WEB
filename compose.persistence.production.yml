@@ -1,0 +1,22 @@
+services:
+  postgres-prod:
+    image: postgres:16.6-alpine
+    container_name: dba-tools-postgres-prod
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Defina POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?Defina POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD}
+    volumes:
+      - type: bind
+        source: ${PROD_POSTGRES_DATA_DIR:?Defina PROD_POSTGRES_DATA_DIR}
+        target: /var/lib/postgresql/data
+        bind:
+          create_host_path: false
+    expose:
+      - "5432"
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 6

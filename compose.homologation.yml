@@ -20,9 +20,16 @@ services:
     # Ajuste estes valores somente após observar o consumo na VM.
     cpus: "1.00"
     mem_limit: 768m
+    networks:
+      - dba_tools_hml
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8590/health', timeout=5)"]
       interval: 10s
       timeout: 6s
       retries: 6
       start_period: 20s
+
+networks:
+  dba_tools_hml:
+    name: dba_tools_hml
+    external: true

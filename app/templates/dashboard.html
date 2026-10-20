@@ -24,25 +24,27 @@
         <div id="resultado"></div>
     </main>
 
+    <script src="/static/safe-html.js"></script>
     <script>
-        const sessionId = "{{ session_id }}";
+        const sessionId = {{ session_id | tojson }};
         const checks = {{ checks | tojson }};
         const btn = document.getElementById("btn-executar");
         const btnPdf = document.getElementById("btn-pdf");
         const resumoDiv = document.getElementById("resumo");
         const resultadoDiv = document.getElementById("resultado");
         let ultimoResultado = null;
+        const pillGroups = new Map();
 
         function renderTabela(linhas) {
             if (!linhas || linhas.length === 0) return "<p>Nenhum resultado.</p>";
             const temStatus = "STATUS" in linhas[0];
             const colunas = Object.keys(linhas[0]).filter(c => c !== "STATUS");
             let html = "<table><thead><tr>";
-            colunas.forEach(c => html += `<th>${c}</th>`);
+            colunas.forEach(c => html += `<th>${escapeHTML(c)}</th>`);
             html += "</tr></thead><tbody>";
             linhas.forEach(row => {
                 const classe = temStatus && String(row.STATUS).toLowerCase() === "alerta" ? ' class="alerta"' : "";
-                html += `<tr${classe}>` + colunas.map(c => `<td>${row[c] ?? ""}</td>`).join("") + "</tr>";
+                html += `<tr${classe}>` + colunas.map(c => `<td>${escapeHTML(row[c])}</td>`).join("") + "</tr>";
             });
             html += "</tbody></table>";
             return html;
@@ -52,14 +54,15 @@
             if (!linhas || linhas.length === 0) return "<p>Nenhum resultado.</p>";
             let html = '<div class="cards-grid">';
             linhas.forEach(row => {
-                const status = (row.STATUS || "indefinido").toLowerCase();
+                const rawStatus = String(row.STATUS || "indefinido").toLowerCase();
+                const status = ["ok", "alerta", "indefinido"].includes(rawStatus) ? rawStatus : "indefinido";
                 const esperado = row.ESPERADO ?? "";
                 const atual = row.ATUAL ?? "";
                 html += `
                     <div class="card ${status}">
-                        <div class="titulo">${row.PARAMETRO ?? ""}</div>
-                        <div class="linha"><span>Esperado</span><span class="valor">${esperado}</span></div>
-                        <div class="linha"><span>Atual</span><span class="valor">${atual}</span></div>
+                        <div class="titulo">${escapeHTML(row.PARAMETRO)}</div>
+                        <div class="linha"><span>Esperado</span><span class="valor">${escapeHTML(esperado)}</span></div>
+                        <div class="linha"><span>Atual</span><span class="valor">${escapeHTML(atual)}</span></div>
                     </div>`;
             });
             html += "</div>";
@@ -71,7 +74,7 @@
             let html = '<div class="contagem-grid">';
             linhas.forEach((row, idx) => {
                 const status = String(row.STATUS || "").toLowerCase() === "alerta" ? "alerta" : "";
-                const detalhe = row.DETALHE ?? "";
+                const detalhe = String(row.DETALHE ?? "");
 
                 // Convenção: se o DETALHE tem " · ", a primeira parte é um
                 // resumo (ex: "média: 47.5 logins/dia") e o resto é uma
@@ -88,20 +91,21 @@
                     const LIMITE = 5;
                     const visiveis = itens.slice(0, LIMITE);
                     const ocultos = itens.slice(LIMITE);
-                    const idPills = `pills-${idx}`;
+                    const idPills = `pills-${pillGroups.size}`;
+                    pillGroups.set(idPills, ocultos);
                     pillsHtml = `<div class="pill-list" id="${idPills}">` +
-                        visiveis.map(i => `<span class="pill">${i}</span>`).join("") +
+                        visiveis.map(i => `<span class="pill">${escapeHTML(i)}</span>`).join("") +
                         (ocultos.length
-                            ? `<span class="pill pill-mais" onclick="expandirPills('${idPills}', ${JSON.stringify(ocultos).replace(/"/g, '&quot;')})">+${ocultos.length} mais</span>`
+                            ? `<span class="pill pill-mais" data-pills="${idPills}">+${ocultos.length} mais</span>`
                             : "") +
                         `</div>`;
                 }
 
                 html += `
                     <div class="contagem-card ${status}">
-                        <div class="titulo">${row.TITULO ?? ""}</div>
-                        <div class="numero">${row.CONTAGEM ?? ""}</div>
-                        ${resumo ? `<div class="resumo-linha">${resumo}</div>` : ""}
+                        <div class="titulo">${escapeHTML(row.TITULO)}</div>
+                        <div class="numero">${escapeHTML(row.CONTAGEM)}</div>
+                        ${resumo ? `<div class="resumo-linha">${escapeHTML(resumo)}</div>` : ""}
                         ${pillsHtml}
                     </div>`;
             });
@@ -120,6 +124,15 @@
                 container.appendChild(span);
             });
         }
+
+        resultadoDiv.addEventListener("click", event => {
+            const trigger = event.target.closest(".pill-mais");
+            if (trigger && resultadoDiv.contains(trigger)) {
+                const id = trigger.dataset.pills;
+                expandirPills(id, pillGroups.get(id) || []);
+                pillGroups.delete(id);
+            }
+        });
 
         function contarStatus(data) {
             const contagem = { ok: 0, alerta: 0, indefinido: 0 };
@@ -144,15 +157,28 @@
                 </div>`;
         }
 
+        function mensagemErro(data, fallback) {
+            const message = typeof data.erro === "string" ? data.erro : fallback;
+            const reference = typeof data.referencia === "string" ? ` Referência: ${data.referencia}.` : "";
+            return message + reference;
+        }
+
         btn.addEventListener("click", async () => {
             btn.disabled = true;
             btn.textContent = "Executando...";
             resumoDiv.innerHTML = "";
             resultadoDiv.innerHTML = "";
+            ultimoResultado = null;
+            btnPdf.style.display = "none";
+            pillGroups.clear();
 
             try {
-                const resp = await fetch(`/analise/${sessionId}/executar`, { method: "POST" });
+                const resp = await fetch(`/analise/${encodeURIComponent(sessionId)}/executar`, { method: "POST" });
                 const data = await resp.json();
+                if (!resp.ok || data.erro) {
+                    resultadoDiv.innerHTML = `<p class="erro">${escapeHTML(mensagemErro(data, "Falha ao executar análise."))}</p>`;
+                    return;
+                }
 
                 resumoDiv.innerHTML = renderResumo(contarStatus(data));
                 ultimoResultado = data;
@@ -162,7 +188,7 @@
                     const erro = data[`${check.id}_erro`];
                     let corpo;
                     if (erro) {
-                        corpo = `<p class="erro">Erro: ${erro}</p>`;
+                        corpo = `<p class="erro">Erro: ${escapeHTML(erro)}</p>`;
                     } else if (check.exibicao === "cards") {
                         corpo = renderCards(data[check.id]);
                     } else if (check.exibicao === "contagem") {
@@ -170,10 +196,10 @@
                     } else {
                         corpo = renderTabela(data[check.id]);
                     }
-                    resultadoDiv.innerHTML += `<section><h2>${check.titulo}</h2>${corpo}</section>`;
+                    resultadoDiv.innerHTML += `<section><h2>${escapeHTML(check.titulo)}</h2>${corpo}</section>`;
                 });
             } catch (e) {
-                resultadoDiv.innerHTML = `<p class="erro">Falha ao executar análise: ${e}</p>`;
+                resultadoDiv.innerHTML = '<p class="erro">Falha ao executar análise. Tente novamente.</p>';
             } finally {
                 btn.disabled = false;
                 btn.textContent = "Executar Análise";
@@ -185,12 +211,16 @@
             btnPdf.disabled = true;
             btnPdf.textContent = "Gerando PDF...";
             try {
-                const resp = await fetch(`/analise/${sessionId}/relatorio`, {
+                const resp = await fetch(`/analise/${encodeURIComponent(sessionId)}/relatorio`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(ultimoResultado),
                 });
-                if (!resp.ok) throw new Error("Falha ao gerar PDF");
+                if (!resp.ok) {
+                    const data = await resp.json();
+                    alert(mensagemErro(data, "Não foi possível gerar o PDF."));
+                    return;
+                }
                 const blob = await resp.blob();
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement("a");
@@ -201,7 +231,7 @@
                 a.remove();
                 window.URL.revokeObjectURL(url);
             } catch (e) {
-                alert("Erro ao gerar PDF: " + e);
+                alert("Não foi possível gerar o PDF. Tente novamente.");
             } finally {
                 btnPdf.disabled = false;
                 btnPdf.textContent = "Baixar Relatório PDF";
