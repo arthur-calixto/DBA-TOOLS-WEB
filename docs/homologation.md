@@ -7,7 +7,7 @@ Produção continua usando `compose.production.yml`, o projeto configurado em
 
 Homologação usa exclusivamente `compose.homologation.yml`, o projeto definido
 em `HML_COMPOSE_PROJECT_NAME`, o container `analise-ambiente-hml` e a porta
-local `127.0.0.1:8591` do host para a porta interna `8590`. O arquivo de variáveis e o diretório
+`8591` do host para a porta interna `8590`, publicada na rede interna. O arquivo de variáveis e o diretório
 de dados são próprios e montados somente para leitura.
 
 O limite inicial é 1 CPU e 768 MiB de memória. Ajuste `cpus` e `mem_limit` no
@@ -49,10 +49,10 @@ diretórios automaticamente.
 
 ## Validação e acesso
 
-Na própria VM, acesse `http://127.0.0.1:8591/` ou use um túnel controlado pela
-rede interna autorizada. Valide `/health`, uma análise com dados sintéticos e a
-geração de relatório. A porta fica vinculada ao loopback e não é exposta
-publicamente; não use dados de clientes.
+Na rede interna autorizada, acesse `http://10.40.0.17:8591/`. Valide
+`/health`, uma análise com dados sintéticos e a geração de relatório. A porta é
+publicada como as portas da produção; restrinja o acesso por firewall da rede
+interna e não use dados de clientes.
 
 ## Rollback
 

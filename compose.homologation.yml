@@ -3,7 +3,7 @@ services:
     image: ${APP_IMAGE:?Defina APP_IMAGE}
     container_name: analise-ambiente-hml
     ports:
-      - "127.0.0.1:8591:8590"
+      - "8591:8590"
     env_file:
       - ${HML_ENV_FILE:?Defina HML_ENV_FILE}
     environment:
