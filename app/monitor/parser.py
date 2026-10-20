@@ -1,5 +1,6 @@
 import re
 from dataclasses import dataclass, field
+from app.monitor.limits import MonitorLimitExceeded, check_deadline
 
 
 @dataclass
@@ -13,7 +14,8 @@ class RegistroConsulta:
     params: list[str] = field(default_factory=list)
 
 
-def parse_consulta_log(content: str) -> list[RegistroConsulta]:
+def parse_consulta_log(content: str, *, max_records: int | None = None,
+                       deadline: float | None = None) -> list[RegistroConsulta]:
     """
     Parseia o Monitor_Consulta.log do monitor de consulta do Sankhya.
     Formato: blocos separados por "##ID_<n>##", cada um com o tempo de
@@ -21,13 +23,22 @@ def parse_consulta_log(content: str) -> list[RegistroConsulta]:
     (Application/ResourceID/uri), o SQL (com "?" como placeholder) e os
     Params na ordem em que aparecem no SQL.
     """
-    parts = re.split(r"##ID_(\d+)##", content)
+    check_deadline(deadline)
+    markers = re.finditer(r"##ID_(\d+)##", content)
+    marker = next(markers, None)
     registros: list[RegistroConsulta] = []
 
-    # parts[0] é lixo antes do primeiro ID; depois alterna [id, bloco, id, bloco, ...]
-    for i in range(1, len(parts), 2):
-        id_ = parts[i]
-        bloco = parts[i + 1]
+    # Itera sem uma segunda cópia completa do log via re.split.
+    block_count = 0
+    while marker is not None:
+        check_deadline(deadline)
+        block_count += 1
+        if max_records is not None and block_count > max_records:
+            raise MonitorLimitExceeded("Quantidade de blocos excede o limite permitido.")
+        following = next(markers, None)
+        id_ = marker.group(1)
+        bloco = content[marker.end():following.start() if following else len(content)]
+        marker = following
 
         m_tempo = re.search(r"tempo:\s*(\d+)\s*\(ms\)", bloco)
         if not m_tempo:

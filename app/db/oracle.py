@@ -1,4 +1,6 @@
 import oracledb
+from app.config import settings
+from app.db.limits import fetch_rows
 
 
 def get_connection(credentials: dict):
@@ -16,12 +18,13 @@ def get_connection(credentials: dict):
         user=credentials["user"],
         password=credentials["password"],
         dsn=dsn,
+        tcp_connect_timeout=settings.db_connect_timeout_seconds,
     )
 
 
 def run_query(credentials: dict, sql: str, params: dict | None = None) -> list[dict]:
     with get_connection(credentials) as conn:
+        conn.call_timeout = settings.db_query_timeout_seconds * 1000
         with conn.cursor() as cur:
             cur.execute(sql, params or {})
-            columns = [col[0] for col in cur.description]
-            return [dict(zip(columns, row)) for row in cur.fetchall()]
+            return fetch_rows(cur)

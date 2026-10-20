@@ -20,7 +20,7 @@ class InvalidSessionId(Exception):
 
 
 def _validate_cliente_id(cliente_id: str) -> None:
-    if not _CLIENTE_ID_RE.match(cliente_id) or ".." in cliente_id:
+    if not _CLIENTE_ID_RE.fullmatch(cliente_id) or ".." in cliente_id:
         raise InvalidSessionId(f"identificador de cliente inválido: {cliente_id!r}")
 
 
@@ -46,7 +46,14 @@ def listar_clientes() -> list[str]:
     if not shared_root.is_dir():
         return []
 
-    return sorted(p.stem for p in shared_root.glob("*.json"))
+    clientes = []
+    for path in shared_root.glob("*.json"):
+        try:
+            if _get_credentials_path(path.stem).is_file():
+                clientes.append(path.stem)
+        except InvalidSessionId:
+            continue
+    return sorted(clientes)
 
 
 def load_credentials(cliente_id: str) -> dict:
@@ -58,10 +65,31 @@ def load_credentials(cliente_id: str) -> dict:
     with open(credentials_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    required_fields = {"db_type"}
+    if not isinstance(data, dict):
+        raise ValueError("Configuração de conexão inválida.")
+    required_fields = {"db_type", "host", "user", "password"}
     missing = required_fields - data.keys()
     if missing:
         raise ValueError(f"{cliente_id}.json incompleto, faltando: {missing}")
+
+    if data["db_type"] not in ("oracle", "sqlserver"):
+        raise ValueError("Tipo de banco não suportado.")
+    if any(not isinstance(data[key], str) or not data[key]
+           for key in required_fields - {"db_type"}):
+        raise ValueError("Configuração de conexão inválida.")
+    if "port" in data:
+        if not isinstance(data["port"], (str, int)) or isinstance(data["port"], bool):
+            raise ValueError("Porta inválida.")
+        try:
+            port = int(data["port"])
+        except (ValueError, TypeError):
+            raise ValueError("Porta inválida.") from None
+        if not 1 <= port <= 65535:
+            raise ValueError("Porta inválida.")
+        data["port"] = port
+    for key in ("cliente_id", "service_name", "sid", "database"):
+        if key in data and data[key] is not None and not isinstance(data[key], str):
+            raise ValueError("Configuração de conexão inválida.")
 
     data.setdefault("cliente_id", cliente_id)
     return data

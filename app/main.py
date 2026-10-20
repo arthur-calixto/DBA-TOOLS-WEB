@@ -1,14 +1,20 @@
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException
 
 from app.config import settings
 from app.routes import analise, monitor
 from app.session import listar_clientes
+from app.errors import PublicHTTPException, SafeErrors
+from app.request_limits import RequestSizeLimit
 
 app = FastAPI(title="Análise de Ambiente Sankhya")
+app.add_middleware(RequestSizeLimit)
+app.add_middleware(SafeErrors)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(analise.router)
 app.include_router(monitor.router)
@@ -16,10 +22,30 @@ app.include_router(monitor.router)
 templates = Jinja2Templates(directory="app/templates")
 
 
+@app.exception_handler(RequestValidationError)
+async def invalid_request(request, exc):
+    return JSONResponse({"erro": "Dados da requisição inválidos."}, status_code=422)
+
+
+@app.exception_handler(HTTPException)
+async def http_error(request, exc):
+    if isinstance(exc, PublicHTTPException):
+        content = {"erro": exc.detail}
+        if exc.reference:
+            content["referencia"] = exc.reference
+        return JSONResponse(content, status_code=exc.status_code)
+    messages = {400: "Requisição inválida.", 404: "Cliente ou recurso não encontrado.",
+                413: "Requisição excede o limite permitido.",
+                422: "Dados da requisição inválidos.",
+                500: "Não foi possível concluir a operação."}
+    return JSONResponse({"erro": messages.get(exc.status_code, "Não foi possível concluir a operação.")},
+                        status_code=exc.status_code, headers=exc.headers)
+
+
 @app.get("/", response_class=HTMLResponse)
 def tela_inicial(request: Request):
     return templates.TemplateResponse(
-        "index.html", {"request": request, "clientes": listar_clientes()}
+        request, "index.html", {"clientes": listar_clientes()}
     )
 
 
