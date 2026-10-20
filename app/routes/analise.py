@@ -2,7 +2,7 @@ from pathlib import Path
 from urllib.parse import quote
 import math
 
-from fastapi import APIRouter, Body, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
@@ -14,8 +14,10 @@ from fastapi.encoders import jsonable_encoder
 from app.config import settings
 from app.db.limits import QueryResultLimitExceeded
 from app.errors import PublicHTTPException, log_failure
+from app.auth import require_authenticated, validate_csrf
 
-router = APIRouter(prefix="/analise", tags=["analise"])
+router = APIRouter(prefix="/analise", tags=["analise"],
+                   dependencies=[Depends(require_authenticated), Depends(validate_csrf)])
 
 templates_dir = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(templates_dir))

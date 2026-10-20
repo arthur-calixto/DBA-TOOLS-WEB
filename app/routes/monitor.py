@@ -5,7 +5,7 @@ import zipfile
 from pathlib import Path, PurePosixPath
 from time import monotonic
 
-from fastapi import APIRouter, File, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
@@ -13,8 +13,10 @@ from app.config import settings
 from app.errors import log_failure
 from app.monitor.limits import MonitorLimitExceeded, check_deadline
 from app.monitor.parser import parse_consulta_log, top_processos, top_queries
+from app.auth import require_authenticated, validate_csrf
 
-router = APIRouter(prefix="/monitor", tags=["monitor"])
+router = APIRouter(prefix="/monitor", tags=["monitor"],
+                   dependencies=[Depends(require_authenticated), Depends(validate_csrf)])
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
 NOME_ARQUIVO_CONSULTA = "Monitor_Consulta.log"
 _processing_slots = threading.BoundedSemaphore(settings.monitor_max_concurrent)

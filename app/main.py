@@ -1,5 +1,5 @@
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -7,17 +7,21 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException
 
 from app.config import settings
-from app.routes import analise, monitor
+from app.routes import analise, monitor, auth
 from app.session import listar_clientes
 from app.errors import PublicHTTPException, SafeErrors
 from app.request_limits import RequestSizeLimit
+from app.auth import SessionRenewalMiddleware
+from app.auth import require_authenticated
 
 app = FastAPI(title="Análise de Ambiente Sankhya")
 app.add_middleware(RequestSizeLimit)
 app.add_middleware(SafeErrors)
+app.add_middleware(SessionRenewalMiddleware)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(analise.router)
 app.include_router(monitor.router)
+app.include_router(auth.router)
 
 templates = Jinja2Templates(directory="app/templates")
 
@@ -43,7 +47,7 @@ async def http_error(request, exc):
 
 
 @app.get("/", response_class=HTMLResponse)
-def tela_inicial(request: Request):
+def tela_inicial(request: Request, _=Depends(require_authenticated)):
     return templates.TemplateResponse(
         request, "index.html", {"clientes": listar_clientes()}
     )

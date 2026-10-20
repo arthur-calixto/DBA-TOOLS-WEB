@@ -1,4 +1,5 @@
-from pydantic import Field
+from cryptography.fernet import Fernet
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,7 +37,33 @@ class Settings(BaseSettings):
     db_pool_timeout_seconds: int = Field(default=30, gt=0)
     db_pool_recycle_seconds: int = Field(default=1800, gt=0)
 
+    auth_enabled: bool = False
+    auth_session_key: str | None = None
+    auth_cookie_name: str = "dba_tools_session"
+    auth_cookie_max_age_seconds: int = Field(default=30 * 24 * 3600, gt=0)
+    auth_cookie_renew_threshold_seconds: int = Field(default=7 * 24 * 3600, gt=0)
+    auth_cookie_secure: bool = False
+    auth_cookie_samesite: str = "lax"
+    csrf_enabled: bool = True
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @model_validator(mode="after")
+    def validate_auth_configuration(self):
+        if self.auth_enabled:
+            if not self.database_url:
+                raise ValueError("DATABASE_URL é obrigatória quando AUTH_ENABLED está ativo")
+            if not self.auth_session_key:
+                raise ValueError("AUTH_SESSION_KEY é obrigatória quando AUTH_ENABLED está ativo")
+            try:
+                Fernet(self.auth_session_key.encode("ascii"))
+            except Exception as exc:
+                raise ValueError("AUTH_SESSION_KEY inválida") from exc
+        if self.auth_cookie_samesite not in {"lax", "strict", "none"}:
+            raise ValueError("AUTH_COOKIE_SAMESITE inválido")
+        if self.auth_cookie_samesite == "none" and not self.auth_cookie_secure:
+            raise ValueError("AUTH_COOKIE_SECURE é obrigatório com SameSite=None")
+        return self
 
 
 settings = Settings()

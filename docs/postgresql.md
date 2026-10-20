@@ -109,3 +109,11 @@ pg_dump --format=custom --host="$PGHOST" --username="$PGUSER" \
 Pendências antes de produção: provisionar volumes com política de backup,
 definir retenção, confirmar firewall/rede Docker e realizar um teste de
 restauração autorizado.
+
+## Autenticação na transição
+
+O banco de usuários será ativado posteriormente com `AUTH_ENABLED=true` e uma
+`AUTH_SESSION_KEY` gerenciada fora do Git. Enquanto `AUTH_ENABLED=false`, as
+rotas legadas continuam disponíveis para a transição. Quando ativado, a
+indisponibilidade do banco retorna erro controlado e não concede acesso anônimo
+às rotas protegidas.
