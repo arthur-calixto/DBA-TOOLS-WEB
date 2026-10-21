@@ -26,6 +26,23 @@ class PersistenceTests(unittest.TestCase):
         self.assertNotIn("sqlite+pysqlite", database.logger.name)
         database.close_database()
 
+    def test_first_session_initialization_is_reentrant_and_closes_database(self):
+        from app.config import Settings
+        from app import persistence as database_api
+        from app.persistence import database
+
+        config = Settings(database_url="sqlite+pysqlite:///:memory:")
+        database.close_database()
+        # Este caminho começa sem engine/factory e exercita a chamada aninhada
+        # _get_session_factory -> get_engine sob o mesmo bloqueio.
+        with database_api.session_scope(config) as session:
+            self.assertIsNotNone(session.bind)
+        self.assertIsNotNone(database._engine)
+        self.assertIsNotNone(database._session_factory)
+        database_api.close_database()
+        self.assertIsNone(database._engine)
+        self.assertIsNone(database._session_factory)
+
     def test_session_scope_rolls_back_and_closes_on_failure(self):
         from app.persistence import database
 

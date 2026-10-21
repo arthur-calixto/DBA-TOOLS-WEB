@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
-from threading import Lock
+from threading import RLock
 from typing import Iterator
 
 from sqlalchemy import Engine, create_engine
@@ -24,7 +24,7 @@ class DatabaseNotConfigured(RuntimeError):
     """Indica que o uso do PostgreSQL foi solicitado sem DATABASE_URL."""
 
 
-_lock = Lock()
+_lock = RLock()
 _engine: Engine | None = None
 _session_factory: sessionmaker[Session] | None = None
 
