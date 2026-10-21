@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     db_pool_timeout_seconds: int = Field(default=30, gt=0)
     db_pool_recycle_seconds: int = Field(default=1800, gt=0)
 
+    # Módulo opt-in; nunca expõe o cofre no modo legado anônimo.
+    connections_enabled: bool = False
+    catalog_max_request_bytes: int = Field(default=128 * 1024, gt=0)
+    credential_keys: str | None = Field(default=None, repr=False)
+    credentials_allow_http: bool = False
+
     auth_enabled: bool = False
     auth_session_key: str | None = None
     auth_cookie_name: str = "dba_tools_session"

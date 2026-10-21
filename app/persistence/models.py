@@ -1,6 +1,9 @@
 """Identidade, sessões persistentes e trilha de auditoria."""
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, JSON, String, func
+from uuid import uuid4
+
+from sqlalchemy import (BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey,
+                        Integer, JSON, String, Text, UniqueConstraint, Uuid, func)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -48,3 +51,55 @@ class AuditEvent(Base):
     outcome: Mapped[str] = mapped_column(String(20), nullable=False)
     target: Mapped[str | None] = mapped_column(String(160))
     occurred_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+# UUIDs independentes dos nomes editáveis; nenhuma credencial vai para o JSONB.
+class CatalogFields:
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    normalized_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    created_by: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False)
+    updated_by: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False)
+    created_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class Client(CatalogFields, Base):
+    __tablename__ = 'clients'
+    legacy_key: Mapped[str | None] = mapped_column(String(80), unique=True)
+    __table_args__ = (UniqueConstraint('normalized_name'),)
+
+
+class Environment(CatalogFields, Base):
+    __tablename__ = 'environments'
+    client_id: Mapped[str] = mapped_column(ForeignKey('clients.id'), index=True, nullable=False)
+    system: Mapped[str] = mapped_column(String(160), default='', nullable=False)
+    internal_address: Mapped[str] = mapped_column(String(255), default='', nullable=False)
+    external_address: Mapped[str] = mapped_column(String(255), default='', nullable=False)
+    contacts: Mapped[str] = mapped_column(Text, default='', nullable=False)
+    __table_args__ = (UniqueConstraint('client_id', 'normalized_name'),)
+
+
+class Credential(CatalogFields, Base):
+    __tablename__ = 'credentials'
+    ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    key_id: Mapped[str] = mapped_column(String(16), nullable=False)
+    __table_args__ = (UniqueConstraint('normalized_name'),)
+
+
+class Connection(CatalogFields, Base):
+    __tablename__ = 'connections'
+    environment_id: Mapped[str] = mapped_column(ForeignKey('environments.id'), index=True, nullable=False)
+    credential_id: Mapped[str] = mapped_column(ForeignKey('credentials.id'), index=True, nullable=False)
+    type: Mapped[str] = mapped_column(String(20), nullable=False)
+    host: Mapped[str] = mapped_column(String(255), nullable=False)
+    port: Mapped[int] = mapped_column(Integer, nullable=False)
+    parameters: Mapped[dict] = mapped_column(JSON().with_variant(JSONB(), 'postgresql'), default=dict, nullable=False)
+    notes: Mapped[str] = mapped_column(Text, default='', nullable=False)
+    __table_args__ = (
+        UniqueConstraint('environment_id', 'normalized_name'),
+        CheckConstraint('port >= 1 AND port <= 65535', name='ck_connections_port'),
+        CheckConstraint("type IN ('oracle','sqlserver','postgresql','ssh','rdp','sftp','scp')", name='ck_connections_type'),
+    )

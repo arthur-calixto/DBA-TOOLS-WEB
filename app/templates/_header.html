@@ -11,6 +11,9 @@
         <a href="/"{% if active_page == 'home' %} aria-current="page"{% endif %}>Início</a>
         <a href="/#clientes"{% if active_page == 'diagnostics' %} aria-current="page"{% endif %}>Análise de Ambiente</a>
         <a href="/monitor"{% if active_page == 'monitor' %} aria-current="page"{% endif %}>Monitor de Consultas</a>
+        {% if request is defined and request.app.state.settings.connections_enabled and request.state.auth_user is defined %}
+        <a href="/connections"{% if active_page == 'connections' %} aria-current="page"{% endif %}>Ambientes e conexões</a>
+        {% endif %}
     </nav>
     {% if (settings is defined and settings.auth_enabled) or (request is defined and request.state.auth_user is defined) %}
     <button id="logout" class="btn-secundario" type="button">Sair</button>

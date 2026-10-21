@@ -8,6 +8,8 @@ from starlette.exceptions import HTTPException
 
 from app.config import settings
 from app.routes import analise, monitor, auth
+from app.connections.limits import CatalogRequestLimit
+from app.connections.routes import router as connections_api, pages as connections_pages
 from app.session import listar_clientes
 from app.permissions import scoped
 from app.errors import PublicHTTPException, SafeErrors
@@ -16,12 +18,16 @@ from app.auth import AuthenticationRequired, SessionRenewalMiddleware, require_a
 
 app = FastAPI(title="Análise de Ambiente Sankhya")
 app.add_middleware(RequestSizeLimit)
+app.add_middleware(CatalogRequestLimit)
 app.add_middleware(SafeErrors)
 app.add_middleware(SessionRenewalMiddleware)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(analise.router)
 app.include_router(monitor.router)
 app.include_router(auth.router)
+app.include_router(connections_api)
+app.include_router(connections_pages)
+app.state.settings = settings
 
 templates = Jinja2Templates(directory="app/templates")
 

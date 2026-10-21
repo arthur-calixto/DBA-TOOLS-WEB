@@ -220,3 +220,25 @@ code { font-family: var(--font-mono); font-size: .85em; }
     .stat { padding: 12px 16px; }
     .stat .numero { font-size: 1.625rem; }
 }
+/* TER-12: catálogo compartilhado, na linguagem visual TER-11. */
+.catalog-toolbar,.catalog-filters { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:16px 0; }
+.catalog-toolbar h2 { margin:0 auto 0 0; }
+.catalog-filters label { display:grid; gap:6px; flex:1 1 160px; }
+select,textarea { max-width:100%; min-height:40px; border:1px solid var(--border); border-radius:var(--radius); padding:8px 12px; background:var(--surface); color:var(--text); font:inherit; }
+.catalog-page > section { background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--radius-lg); padding:24px; }
+.catalog-page .grid-clientes button { color:var(--text); justify-content:flex-start; text-align:left; }
+.catalog-page .grid-clientes button:hover { background:var(--surface-hover); }
+.credential-row { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:12px 0; border-bottom:1px solid var(--border-soft); }
+.credential-row strong { margin-right:auto; }
+dialog { width:min(640px,92vw); max-height:88vh; overflow:auto; border:1px solid var(--border-soft); border-radius:var(--radius-lg); padding:24px; color:var(--text); background:var(--surface); }
+dialog::backdrop { background:#24333F66; }
+#editor-fields { display:grid; gap:14px; }
+#editor-fields label,#secret-dialog label { display:grid; gap:6px; }
+#editor-fields input,#editor-fields select,#editor-fields textarea { width:100%; }
+#editor-fields input[type=checkbox] { width:24px; min-height:24px; }
+#secret-dialog button { margin:16px 8px 0 0; }
+#catalog-status:empty { display:none; }
+@media(max-width:640px){.catalog-page > section { padding:16px; }.catalog-toolbar{gap:8px;}dialog{padding:18px;}}
+.catalog-page h2,#editor-fields p { overflow-wrap:anywhere; min-width:0; }
+.catalog-page .grid-clientes button { overflow-wrap:anywhere; white-space:normal; }
+.credential-row strong { overflow-wrap:anywhere; min-width:0; }
