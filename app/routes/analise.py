@@ -14,7 +14,7 @@ from fastapi.encoders import jsonable_encoder
 from app.config import settings
 from app.db.limits import QueryResultLimitExceeded
 from app.errors import PublicHTTPException, log_failure
-from app.auth import require_authenticated, validate_csrf
+from app.auth import require_authenticated, validate_csrf, require_permission, check_client_scope, audit_action
 
 router = APIRouter(prefix="/analise", tags=["analise"],
                    dependencies=[Depends(require_authenticated), Depends(validate_csrf)])
@@ -98,9 +98,11 @@ def _validate_results(resultados: dict) -> dict:
 
 
 @router.get("/{session_id}", response_class=HTMLResponse)
-def tela_analise(request: Request, session_id: str):
+def tela_analise(request: Request, session_id: str, user=Depends(require_permission("diagnostics.view"))):
+    check_client_scope(user, session_id)
     try:
         credentials = _credentials(session_id)
+        check_client_scope(user, session_id, credentials.get("environment") or "legacy")
     except HTTPException as exc:
         message = exc.detail
         if isinstance(exc, PublicHTTPException) and exc.reference:
@@ -129,8 +131,10 @@ def tela_analise(request: Request, session_id: str):
 
 
 @router.post("/{session_id}/executar")
-def executar_analise(session_id: str):
+def executar_analise(session_id: str, user=Depends(require_permission("diagnostics.execute"))):
+    check_client_scope(user, session_id)
     credentials = _credentials(session_id)
+    check_client_scope(user, session_id, credentials.get("environment") or "legacy")
 
     db_type = credentials["db_type"]
     resultados = {}
@@ -148,12 +152,15 @@ def executar_analise(session_id: str):
             reference = log_failure(f"diagnostic_{check.id}_failed")
             resultados[f"{check.id}_erro"] = f"Não foi possível concluir a coleta. Referência: {reference}."
 
+    audit_action("diagnostics.execute", "partial" if any(k.endswith("_erro") for k in resultados) else "success", user, session_id)
     return JSONResponse(content=resultados)
 
 
 @router.post("/{session_id}/relatorio")
-def gerar_relatorio(session_id: str, resultados: dict = Body(...)):
+def gerar_relatorio(session_id: str, resultados: dict = Body(...), user=Depends(require_permission("reports.export"))):
+    check_client_scope(user, session_id)
     credentials = _credentials(session_id)
+    check_client_scope(user, session_id, credentials.get("environment") or "legacy")
     resultados = _validate_results(resultados)
 
     checks_meta = [
@@ -173,6 +180,7 @@ def gerar_relatorio(session_id: str, resultados: dict = Body(...)):
                  "Nenhuma evidência foi descartada; a análise permanece completa.",
         ) from None
 
+    audit_action("reports.export", "success", user, session_id)
     nome_arquivo = f"analise-ambiente-{session_id}.pdf"
     return StreamingResponse(
         pdf_buffer,

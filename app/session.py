@@ -87,7 +87,7 @@ def load_credentials(cliente_id: str) -> dict:
         if not 1 <= port <= 65535:
             raise ValueError("Porta inválida.")
         data["port"] = port
-    for key in ("cliente_id", "service_name", "sid", "database"):
+    for key in ("cliente_id", "service_name", "sid", "database", "environment"):
         if key in data and data[key] is not None and not isinstance(data[key], str):
             raise ValueError("Configuração de conexão inválida.")
 

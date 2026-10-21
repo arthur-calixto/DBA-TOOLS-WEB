@@ -9,6 +9,7 @@ from starlette.exceptions import HTTPException
 from app.config import settings
 from app.routes import analise, monitor, auth
 from app.session import listar_clientes
+from app.permissions import scoped
 from app.errors import PublicHTTPException, SafeErrors
 from app.request_limits import RequestSizeLimit
 from app.auth import AuthenticationRequired, SessionRenewalMiddleware, require_authenticated
@@ -51,8 +52,11 @@ async def http_error(request, exc):
 
 @app.get("/", response_class=HTMLResponse)
 def tela_inicial(request: Request, _=Depends(require_authenticated)):
+    clients = listar_clientes()
+    if settings.auth_enabled:
+        clients = [client for client in clients if scoped(_, client)]
     return templates.TemplateResponse(
-        request, "index.html", {"clientes": listar_clientes(), "settings": settings}
+        request, "index.html", {"clientes": clients, "settings": settings}
     )
 
 

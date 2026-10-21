@@ -3,14 +3,14 @@ import threading
 import zipfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Request, UploadFile, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from app.config import settings
 from app.errors import log_failure
 from app.monitor.streaming import analyze_archive
-from app.auth import require_authenticated, validate_csrf
+from app.auth import require_authenticated, validate_csrf, require_permission, audit_action
 
 router = APIRouter(prefix="/monitor", tags=["monitor"],
                    dependencies=[Depends(require_authenticated), Depends(validate_csrf)])
@@ -19,7 +19,7 @@ _processing_slots = threading.BoundedSemaphore(settings.monitor_max_concurrent)
 
 
 @router.get("", response_class=HTMLResponse)
-def tela_upload(request: Request):
+def tela_upload(request: Request, user=Depends(require_permission("monitor.view"))):
     return templates.TemplateResponse(request, "monitor.html", {"settings": settings})
 
 
@@ -63,7 +63,7 @@ def _check_directory(stream) -> None:
 
 
 @router.post("/analisar")
-def analisar_monitor(arquivo: UploadFile = File(...)):
+def analisar_monitor(arquivo: UploadFile = File(...), user=Depends(require_permission("monitor.execute"))):
     # Rota síncrona: descompressão e parsing rodam no threadpool, fora do event loop.
     if not _processing_slots.acquire(blocking=False):
         return JSONResponse({"erro": "Monitor ocupado. Tente novamente em instantes."},
@@ -76,13 +76,19 @@ def analisar_monitor(arquivo: UploadFile = File(...)):
         if not result["total_registros"]:
             return JSONResponse({"erro": "Nenhum registro reconhecido no Monitor_Consulta.log."},
                                 status_code=422)
+        audit_action("monitor.execute", "success", user)
         return JSONResponse(result)
+    except HTTPException:
+        raise
     except (zipfile.BadZipFile, EOFError, NotImplementedError, RuntimeError):
+        audit_action("monitor.execute", "invalid", user)
         return JSONResponse({"erro": "Arquivo ZIP inválido ou não suportado."}, status_code=400)
     except ValueError:
+        audit_action("monitor.execute", "invalid", user)
         return JSONResponse({"erro": "Arquivo inválido. Envie um ZIP com um único Monitor_Consulta.log e formato suportado."},
                             status_code=400)
     except Exception:
+        audit_action("monitor.execute", "failure", user)
         reference = log_failure("monitor_failed")
         return JSONResponse({"erro": "Não foi possível analisar o arquivo.",
                              "referencia": reference}, status_code=500)

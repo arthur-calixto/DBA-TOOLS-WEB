@@ -38,9 +38,13 @@ aplicação for ativada.
 
 O cookie HttpOnly persistente dura 30 dias e é renovado quando restam menos de
 7 dias. Ele contém uma credencial Fernet com expiração, identificador de usuário
-e `auth_version`. Logout remove os cookies. Alteração de senha, desativação e
+e `auth_version`. A sessão também precisa existir em `auth_sessions`, onde
+apenas o hash do identificador é persistido. Logout revoga essa sessão no
+PostgreSQL e remove os cookies. Alteração de senha, desativação e
 revogação incrementam `auth_version` e invalidam todas as sessões do usuário.
 
-Permissões ficam no JSONB de `users` e são negadas por padrão; cada verificação
-é feita no backend. CSRF usa um token derivado criptograficamente do cookie de
+Perfis e escopos de cliente/ambiente complementam as permissões JSONB de
+`users`; cada verificação ocorre no backend. A matriz, a migration
+`0002_sessions_audit`, a auditoria e a transição de cookies antigos estão
+documentadas em [access-control.md](access-control.md). CSRF usa um token derivado criptograficamente do cookie de
 sessão e valida `Origin` quando presente.
