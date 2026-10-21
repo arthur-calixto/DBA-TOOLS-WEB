@@ -82,6 +82,29 @@ class FrontendTests(unittest.TestCase):
         })()''', payload=PAYLOAD)
         self.assertEqual(result['captured']['clipboard'], PAYLOAD)
 
+    def test_monitor_full_sql_is_readable_and_copied_without_truncation(self):
+        sql = "SELECT '" + PAYLOAD + "' " + ("/* evidência sintética */ " * 500)
+        rendered = self.run_js('monitor',
+            'renderTabelaQueries([{SQL:"prévia",SQL_COMPLETO:payload}])', payload=sql)['result']
+        parsed = self.assert_safe(rendered)
+        self.assertIn('details', parsed.tags)
+        self.assertIn('summary', parsed.tags)
+        full_text = re.search(r'<pre>(.*?)</pre>', rendered, re.S).group(1)
+        self.assertEqual(Markup(full_text).text, sql)
+        copied = self.run_js('monitor', '''(async () => {
+            ativarBotoesCopiar([{SQL:"prévia",SQL_COMPLETO:payload}]);
+            await copyButton.listeners.click();
+            return true;
+        })()''', payload=sql)
+        self.assertEqual(copied['captured']['clipboard'], sql)
+
+    def test_monitor_total_time_has_explicit_unit(self):
+        result = self.run_js('monitor', 'btn.listeners.click()', response={
+            'total_registros': 12, 'tempo_total_ms': 3456,
+            'top_queries': [], 'top_processos': []})
+        self.assertIn('3456 <span class="unit">ms</span>', result['html'])
+        self.assertIn('Tempo total acumulado', result['html'])
+
     def test_monitor_upload_and_logout_send_session_security_headers(self):
         rendered = templates.env.get_template('monitor.html').render(settings=type('Settings', (), {'auth_enabled': True})())
         self.assertIn('"X-CSRF-Token": csrfToken()', rendered)

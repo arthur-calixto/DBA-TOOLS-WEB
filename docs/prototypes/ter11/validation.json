@@ -1,0 +1,21 @@
+{
+  "reports": [
+    {
+      "page": "index",
+      "violations": []
+    },
+    {
+      "page": "monitor",
+      "violations": []
+    }
+  ],
+  "errors": [],
+  "checks": [
+    "6 responsive screenshots",
+    "search",
+    "keyboard Enter",
+    "initial state",
+    "synthetic results",
+    "file selection"
+  ]
+}

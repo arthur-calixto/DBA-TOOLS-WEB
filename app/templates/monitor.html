@@ -15,11 +15,11 @@
     {% set active_page = "monitor" %}
     {% include "_header.html" %}
 
-    <main id="main-content" tabindex="-1" class="page">
+    <main id="main-content" tabindex="-1" class="page monitor-page">
 
         <div class="eyebrow">Monitor de consulta</div>
 
-        <h1>Análise de Queries e Processos</h1>
+        <h1>Monitor de Consultas<span class="hero-accent">.</span></h1>
 
         <div class="meta">
             Envie o zip exportado pelo monitor de consulta/processos do Sankhya
@@ -82,7 +82,7 @@
                         <td>${escapeHTML(row.TEMPO_MS)}</td>
                         <td>${escapeHTML(row.APPLICATION)}</td>
                         <td>${escapeHTML(row.RESOURCE_ID)}</td>
-                        <td class="sql">${escapeHTML(row.SQL)}</td>
+                        <td class="sql"><details class="sql-details"><summary>Visualizar SQL completo</summary><pre>${escapeHTML(row.SQL_COMPLETO || row.SQL)}</pre></details><div class="sql-preview">${escapeHTML(row.SQL)}</div></td>
                         <td>
                             <button
                                 type="button"
@@ -341,11 +341,11 @@
                             <div class="stat">
 
                                 <div class="numero">
-                                    ${escapeHTML(data.tempo_total_ms)}
+                                    ${escapeHTML(data.tempo_total_ms)} <span class="unit">ms</span>
                                 </div>
 
                                 <div class="label">
-                                    Tempo total (ms)
+                                    Tempo total acumulado
                                 </div>
 
                             </div>
@@ -356,7 +356,7 @@
                         <section>
 
                             <h2>
-                                Top Queries Mais Lentas
+                                Queries mais lentas
                             </h2>
 
                             ${renderTabelaQueries(
@@ -369,7 +369,7 @@
                         <section>
 
                             <h2>
-                                Top Processos (Application / ResourceID)
+                                Processos mais pesados · Application / ResourceID
                             </h2>
 
                             ${renderContagem(

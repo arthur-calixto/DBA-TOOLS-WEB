@@ -11,13 +11,13 @@
     {% set active_page = "home" %}
     {% include "_header.html" %}
 
-    <main id="main-content" tabindex="-1" class="page">
-        <div class="eyebrow">Painel de diagnóstico</div>
-        <h1>O que você quer analisar?</h1>
-        <div class="meta">Ferramentas de diagnóstico de ambientes Sankhya — banco de dados, parâmetros e monitor de consulta.</div>
+    <main id="main-content" tabindex="-1" class="page home-page">
+        <div class="eyebrow">Seu workspace de diagnóstico</div>
+        <h1>Clareza para analisar.<br><span class="hero-accent">Agilidade para agir.</span></h1>
+        <div class="meta">Escolha uma ferramenta e vá direto ao que precisa investigar.</div>
 
         <div class="tiles">
-            <div class="tile tile-analise">
+            <a class="tile tile-analise" href="#clientes">
                 <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                     <ellipse cx="12" cy="5" rx="8" ry="3"></ellipse>
                     <path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"></path>
@@ -26,36 +26,37 @@
                 <div class="titulo">Análise Geral do Ambiente</div>
                 <div class="descricao">Locks, nível de personalização, parâmetros, jobs com falha e eventos com erro — direto no banco do cliente.</div>
                 {% if clientes %}
-                <div class="ir">↓ selecione o cliente abaixo</div>
+                <div class="ir">Selecionar cliente →</div>
                 {% endif %}
-            </div>
+            </a>
 
-            <a class="tile" href="/monitor">
+            <a class="tile tile-monitor" href="/monitor">
                 <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M2 12h4l2 8 4-16 3 12 2-4h5"></path>
                 </svg>
-                <div class="titulo">Monitor de Consulta</div>
+                <div class="titulo">Monitor de Consultas</div>
                 <div class="descricao">Envie o zip do monitor de consulta/processos e veja as queries mais lentas e os processos que mais consomem tempo.</div>
-                <div class="ir">Abrir →</div>
+                <div class="ir">Abrir Monitor →</div>
             </a>
         </div>
 
         {% if clientes %}
         <section id="clientes" class="busca-clientes">
-            <h2>Selecionar cliente</h2>
+            <div class="eyebrow">Análise Geral do Ambiente</div>
+            <h2>Qual cliente vamos analisar?</h2>
             <div class="campo-busca">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                     <circle cx="11" cy="11" r="7"></circle>
                     <path d="M21 21l-4.3-4.3"></path>
                 </svg>
                 <label class="sr-only" for="busca-cliente">Buscar cliente</label>
-                <input type="text" id="busca-cliente" placeholder="buscar cliente..." autocomplete="off" autofocus>
+                <input type="text" id="busca-cliente" placeholder="Busque pelo nome do cliente…" autocomplete="off" aria-controls="grid-clientes" aria-describedby="contador-clientes">
             </div>
             <div class="contador-clientes" id="contador-clientes" role="status"></div>
             <div class="grid-clientes" id="grid-clientes">
                 {% for cliente in clientes %}
                 <a class="cliente-item" href="/analise/{{ cliente }}" data-nome="{{ cliente|lower }}">
-                    <span class="nome">{{ cliente }}</span> <span class="seta">→</span>
+                    <span class="client-avatar" aria-hidden="true">{{ cliente[:2]|upper }}</span><span class="nome">{{ cliente }}</span> <span class="seta" aria-hidden="true">↗</span>
                 </a>
                 {% endfor %}
             </div>
@@ -80,6 +81,11 @@
         }
 
         if (input) {
+            document.querySelector(".tile-analise").addEventListener("click", (event) => {
+                event.preventDefault();
+                document.getElementById("clientes").scrollIntoView({block: "start"});
+                input.focus({preventScroll: true});
+            });
             atualizarContador(itens.length);
 
             input.addEventListener("input", () => {
