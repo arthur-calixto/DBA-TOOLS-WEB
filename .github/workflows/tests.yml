@@ -1,0 +1,32 @@
+name: Regression tests
+on:
+  pull_request:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install PDF and ODBC test dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils unixodbc
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Full regression suite (including synthetic large ZIPs)
+        run: python -m unittest discover -s tests -v
+      - name: Prove Monitor regressions are detected
+        run: python scripts/check-monitor-mutations.py
+      - name: Validate sources
+        run: |
+          python -m compileall -q app tests scripts/check-monitor-mutations.py
+          git diff --check

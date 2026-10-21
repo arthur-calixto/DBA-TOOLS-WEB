@@ -56,7 +56,8 @@ class StreamingMonitorTests(unittest.TestCase):
                             b'username=synthetic&password=synthetic-password',
                             {b'content-type': b'application/x-www-form-urlencoded'})
             self.assertEqual(login.status, 200)
-            body, headers = multipart(archive())
+            import zipfile
+            body, headers = multipart(archive([('Monitor_Consulta.log', LOG), ('auxiliary', b'x' * (12 * 1024 * 1024))], compression=zipfile.ZIP_STORED))
             headers.update({b'cookie': f'{settings.auth_cookie_name}={tokens[0]}'.encode(),
                             b'x-csrf-token': _csrf_value(tokens[0]).encode(),
                             b'origin': b'http://test', b'host': b'test'})
@@ -93,3 +94,64 @@ class StreamingMonitorTests(unittest.TestCase):
                 analyze_archive(io.BytesIO(archive()))
         self.assertTrue(directories)
         self.assertTrue(all(not Path(path).exists() for path in directories))
+
+    def assert_upload_succeeds(self, **limits):
+        with patch.multiple(settings, **limits), patch('app.monitor.limits.monotonic', return_value=10**30):
+            body, headers = multipart(archive([('Monitor_Consulta.log', LOG), ('auxiliary', 'x')]))
+            response = request(app, '/monitor/analisar', 'POST', body, headers)
+        self.assertEqual(response.status, 200, response.text)
+        self.assertEqual(response.json()['total_registros'], 2)
+        self.assertEqual(response.json()['tempo_total_ms'], 200)
+
+    def test_no_entry_count_ceiling(self):
+        self.assert_upload_succeeds(zip_max_entries=1)
+
+    def test_no_decompressed_size_ceiling(self):
+        self.assert_upload_succeeds(monitor_max_uncompressed_bytes=1, zip_max_uncompressed_bytes=1)
+
+    def test_no_compression_ratio_ceiling(self):
+        self.assert_upload_succeeds(zip_max_ratio=1)
+
+    def test_no_log_size_ceiling(self):
+        self.assert_upload_succeeds(monitor_max_log_bytes=1)
+
+    def test_no_record_count_ceiling(self):
+        self.assert_upload_succeeds(monitor_max_records=1)
+
+    def test_no_processing_deadline(self):
+        # Um relógio virtual vencido detecta a volta de check_deadline sem sleeps.
+        self.assert_upload_succeeds(monitor_processing_seconds=0.000001)
+
+    def test_temporary_database_removed_after_success(self):
+        from tempfile import TemporaryDirectory
+        from pathlib import Path
+        from app.monitor.streaming import analyze_archive
+        directories = []
+
+        def directory(**kwargs):
+            result = TemporaryDirectory(**kwargs)
+            directories.append(result.name)
+            return result
+
+        with patch('app.monitor.streaming.TemporaryDirectory', directory):
+            result = analyze_archive(io.BytesIO(archive()))
+        self.assertEqual(result['total_registros'], 2)
+        self.assertTrue(directories)
+        self.assertTrue(all(not Path(path).exists() for path in directories))
+
+    def test_request_spool_closed_after_success_and_failure(self):
+        from tempfile import SpooledTemporaryFile
+        for content, expected in [(archive(), 200), (b'invalid zip', 400)]:
+            with self.subTest(status=expected):
+                spools = []
+
+                def spool(**kwargs):
+                    result = SpooledTemporaryFile(**kwargs)
+                    spools.append(result)
+                    return result
+
+                with patch('app.request_limits.SpooledTemporaryFile', spool):
+                    body, headers = multipart(content)
+                    self.assertEqual(request(app, '/monitor/analisar', 'POST', body, headers).status, expected)
+                self.assertTrue(spools)
+                self.assertTrue(all(value.closed for value in spools))
