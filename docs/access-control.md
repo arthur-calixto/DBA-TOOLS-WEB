@@ -68,9 +68,11 @@ não registrar o username submetido sem validação.
    antigos precisarão de novo login. Aplicação antiga ignora as novas tabelas,
    mas não oferece a revogação individual desta versão.
 3. No container/ferramenta aprovada e no banco HML, conferir `python -m alembic
-   current` (esperado 0001_users) e `python -m alembic heads` (0002_sessions_audit).
-   Depois da aprovação operacional, executar `python -m alembic upgrade head`.
-   Não executar estes comandos contra produção nesta etapa.
+   current` (registrar revisão real, sem assumir 0001_users) e `python -m alembic
+   heads` (conferir head da imagem aprovada).
+   No fluxo atual, o deploy manual HML aplica upgrade após backup verificado
+   automaticamente (docs/homologation.md). Comando manual fica apenas para
+   manutenção aprovada, fora do deploy. Não executar contra produção nesta etapa.
 4. Fazer rollout manual do SHA aprovado com a mesma AUTH_SESSION_KEY persistida
    fora da imagem e DATABASE_URL de HML. Nunca gerar nova chave em cada restart.
    `AUTH_COOKIE_MAX_AGE_SECONDS` (2592000) e

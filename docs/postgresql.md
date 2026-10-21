@@ -117,3 +117,13 @@ O banco de usuários será ativado posteriormente com `AUTH_ENABLED=true` e uma
 rotas legadas continuam disponíveis para a transição. Quando ativado, a
 indisponibilidade do banco retorna erro controlado e não concede acesso anônimo
 às rotas protegidas.
+
+
+## Automação do deploy HML
+
+O workflow manual HML agora valida e executa backup + upgrade por digest antes
+atualizar a aplicação. Usar [homologation.md](homologation.md) para configurar
+as variables de backup/projeto/banco e entender falhas/rollback. Os comandos
+manuais acima ficam para manutenção aprovada; não rodar em paralelo ao deploy.
+Alembic online PostgreSQL utiliza advisory lock para serializar migrations.
+Não há automação nova para produção: ver [planejamento](production-migration-plan.md).
