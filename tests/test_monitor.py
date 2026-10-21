@@ -40,8 +40,20 @@ class MonitorTests(unittest.TestCase):
             self.assertEqual(self.upload(archive([('a', 'a'), ('Monitor_Consulta.log', LOG)])).status, 413)
 
     def test_uncompressed_total_limit_includes_unused_entries(self):
-        with patch.object(settings, 'zip_max_uncompressed_bytes', len(LOG.encode()) + 2):
+        with patch.object(settings, 'monitor_max_uncompressed_bytes', len(LOG.encode()) + 2):
             self.assertEqual(self.upload(archive([('Monitor_Consulta.log', LOG), ('unused', '123')])).status, 413)
+
+    def test_large_monitor_uncompressed_content_uses_specific_limit(self):
+        content = archive([('Monitor_Consulta.log', LOG), ('unused', 'x' * (33 * 1024 * 1024))],
+                          compression=zipfile.ZIP_STORED)
+        with patch.object(settings, 'monitor_max_uncompressed_bytes', 64 * 1024 * 1024):
+            self.assertEqual(self.upload(content).status, 200)
+
+    def test_monitor_uncompressed_limit_still_rejects_excessive_content(self):
+        content = archive([('Monitor_Consulta.log', LOG), ('unused', 'x' * (2 * 1024 * 1024))],
+                          compression=zipfile.ZIP_STORED)
+        with patch.object(settings, 'monitor_max_uncompressed_bytes', 1024 * 1024):
+            self.assertEqual(self.upload(content).status, 413)
 
     def test_compression_ratio_limit(self):
         with patch.object(settings, 'zip_max_ratio', 2):
@@ -145,5 +157,5 @@ class MonitorTests(unittest.TestCase):
 
     def test_exact_upload_log_record_and_total_limits_are_accepted(self):
         content = archive()
-        with patch.object(settings, 'monitor_max_log_bytes', len(LOG.encode())), patch.object(settings, 'zip_max_uncompressed_bytes', len(LOG.encode())), patch.object(settings, 'monitor_max_records', 2):
+        with patch.object(settings, 'monitor_max_log_bytes', len(LOG.encode())), patch.object(settings, 'monitor_max_uncompressed_bytes', len(LOG.encode())), patch.object(settings, 'monitor_max_records', 2):
             self.assertEqual(self.upload(content).status, 200)

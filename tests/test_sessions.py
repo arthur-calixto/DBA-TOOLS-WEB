@@ -56,7 +56,7 @@ class SessionTests(unittest.TestCase):
 
     def test_security_limits_must_be_positive(self):
         for name in ['max_upload_bytes', 'max_request_bytes', 'max_report_bytes', 'report_max_cells', 'zip_max_entries',
-                     'zip_max_uncompressed_bytes', 'zip_max_ratio', 'monitor_max_log_bytes',
+                     'zip_max_uncompressed_bytes', 'monitor_max_uncompressed_bytes', 'zip_max_ratio', 'monitor_max_log_bytes',
                      'monitor_max_records', 'monitor_processing_seconds', 'monitor_max_concurrent',
                      'db_connect_timeout_seconds', 'db_query_timeout_seconds', 'db_max_rows']:
             with self.subTest(name=name), self.assertRaises(ValidationError):

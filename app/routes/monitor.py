@@ -89,7 +89,7 @@ def _read_log(arquivo: UploadFile, deadline: float) -> str:
             if entry.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
                 raise ValueError("Método de compressão do ZIP não é suportado.")
             total += entry.file_size
-            if total > settings.zip_max_uncompressed_bytes:
+            if total > settings.monitor_max_uncompressed_bytes:
                 raise MonitorLimitExceeded("Conteúdo descompactado excede o limite permitido.")
             if entry.file_size > max(1, entry.compress_size) * settings.zip_max_ratio:
                 raise MonitorLimitExceeded("Taxa de compressão do ZIP excede o limite permitido.")

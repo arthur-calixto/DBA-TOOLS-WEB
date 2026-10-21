@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     report_max_cells: int = Field(default=50_000, gt=0)
     zip_max_entries: int = Field(default=200, gt=0)
     zip_max_uncompressed_bytes: int = Field(default=32 * 1024 * 1024, gt=0)
+    monitor_max_uncompressed_bytes: int = Field(default=256 * 1024 * 1024, gt=0)
     zip_max_ratio: int = Field(default=200, gt=0)
     monitor_max_log_bytes: int = Field(default=8 * 1024 * 1024, gt=0)
     monitor_max_records: int = Field(default=50_000, gt=0)
