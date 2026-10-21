@@ -3,55 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Análise de Ambiente Sankhya</title>
+    <title>Início — DBA-TOOLS-WEB</title>
     <link rel="stylesheet" href="/static/styles.css">
-    <style>
-        .tile.tile-analise { cursor: default; }
-        .tile.tile-analise:hover { transform: none; }
-
-        .busca-clientes { margin-top: 2rem; }
-        .busca-clientes.oculto { display: none; }
-
-        .campo-busca { position: relative; max-width: 420px; }
-        .campo-busca input {
-            width: 100%; padding: 0.65rem 0.9rem 0.65rem 2.2rem;
-            font-family: var(--font-mono); font-size: 0.85rem;
-        }
-        .campo-busca svg {
-            position: absolute; left: 0.7rem; top: 50%; transform: translateY(-50%);
-            width: 15px; height: 15px; color: var(--text-faint); pointer-events: none;
-        }
-        .contador-clientes { font-size: 0.75rem; color: var(--text-faint); margin-top: 0.5rem;
-                              font-family: var(--font-mono); }
-
-        .grid-clientes {
-            display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-            gap: 0.5rem; margin-top: 1rem; max-height: 420px; overflow-y: auto; padding-right: 0.3rem;
-        }
-        .cliente-item {
-            display: flex; align-items: center; justify-content: space-between;
-            background: var(--surface); border: 1px solid var(--border-soft);
-            border-radius: var(--radius); padding: 0.6rem 0.85rem;
-            font-family: var(--font-mono); font-size: 0.8rem; color: var(--text);
-        }
-        .cliente-item:hover { border-color: var(--accent); color: var(--text); background: var(--surface-hover); }
-        .cliente-item .seta { color: var(--accent); flex-shrink: 0; margin-left: 0.5rem; }
-        .cliente-item .nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .cliente-item mark { background: var(--accent-dim); color: var(--accent); border-radius: 2px; }
-
-        .sem-resultado { font-size: 0.8rem; color: var(--text-faint); margin-top: 1rem; }
-        .sem-clientes { font-size: 0.8rem; color: var(--text-faint); margin-top: 1rem; line-height: 1.6; }
-        .sem-clientes code { background: var(--bg-elevated); padding: 0.1rem 0.4rem; border-radius: 4px; }
-    </style>
+    <script src="/static/navigation.js" defer></script>
 </head>
 <body>
-    <div class="topbar">
-        <span class="pulse"></span>
-        <span class="marca">ANÁLISE<span class="sub">/ambiente</span></span>
-        {% if settings.auth_enabled %}<button id="logout" class="btn-secundario">Sair</button>{% endif %}
-    </div>
+    {% set active_page = "home" %}
+    {% include "_header.html" %}
 
-    <main class="page">
+    <main id="main-content" tabindex="-1" class="page">
         <div class="eyebrow">Painel de diagnóstico</div>
         <h1>O que você quer analisar?</h1>
         <div class="meta">Ferramentas de diagnóstico de ambientes Sankhya — banco de dados, parâmetros e monitor de consulta.</div>
@@ -81,16 +41,17 @@
         </div>
 
         {% if clientes %}
-        <section class="busca-clientes">
+        <section id="clientes" class="busca-clientes">
             <h2>Selecionar cliente</h2>
             <div class="campo-busca">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                     <circle cx="11" cy="11" r="7"></circle>
                     <path d="M21 21l-4.3-4.3"></path>
                 </svg>
+                <label class="sr-only" for="busca-cliente">Buscar cliente</label>
                 <input type="text" id="busca-cliente" placeholder="buscar cliente..." autocomplete="off" autofocus>
             </div>
-            <div class="contador-clientes" id="contador-clientes"></div>
+            <div class="contador-clientes" id="contador-clientes" role="status"></div>
             <div class="grid-clientes" id="grid-clientes">
                 {% for cliente in clientes %}
                 <a class="cliente-item" href="/analise/{{ cliente }}" data-nome="{{ cliente|lower }}">
@@ -101,7 +62,7 @@
             <div class="sem-resultado" id="sem-resultado" style="display:none;">Nenhum cliente encontrado.</div>
         </section>
         {% else %}
-        <div class="sem-clientes">
+        <div id="clientes" class="sem-clientes">
             Nenhum cliente encontrado. Adicione um arquivo <code>NOME_CLIENTE.json</code>
             no diretório compartilhado (<code>SHARED_DIR</code>) com as credenciais de conexão.
         </div>
@@ -109,12 +70,6 @@
     </main>
 
     <script>
-        const logout = document.getElementById("logout");
-        if (logout) logout.addEventListener("click", async () => {
-            const csrf = document.cookie.split("; ").find(v => v.startsWith("dba_tools_csrf="))?.split("=")[1] || "";
-            const response = await fetch("/auth/logout", {method: "POST", headers: {"X-CSRF-Token": csrf}, credentials: "same-origin"});
-            if (response.ok) window.location.assign("/login");
-        });
         const input = document.getElementById("busca-cliente");
         const itens = Array.from(document.querySelectorAll(".cliente-item"));
         const contador = document.getElementById("contador-clientes");

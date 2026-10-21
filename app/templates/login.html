@@ -3,22 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Entrar — Análise de Ambiente</title>
+    <title>Entrar — DBA-TOOLS-WEB</title>
     <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/navigation.js" defer></script>
 </head>
 <body>
-    <div class="topbar">
-        <span class="pulse"></span>
-        <span class="marca">ANÁLISE<span class="sub">/ambiente</span></span>
-    </div>
-    <main class="page login-page">
+    {% set active_page = "login" %}
+    {% include "_header.html" %}
+    <main id="main-content" tabindex="-1" class="page login-page">
         <div class="eyebrow">Acesso interno</div>
         <h1>Entrar no painel</h1>
         <p class="meta">Use suas credenciais corporativas para acessar as ferramentas de diagnóstico.</p>
         <form id="login-form" class="login-form" method="post" action="/auth/login">
             <input type="hidden" name="next" value="{{ next }}">
             <label for="username">Usuário</label>
-            <input id="username" name="username" autocomplete="username" required autofocus>
+            <input id="username" name="username" type="text" autocomplete="username" required autofocus>
             <label for="password">Senha</label>
             <input id="password" name="password" type="password" autocomplete="current-password" required>
             <div id="login-error" class="erro" role="alert" hidden></div>
@@ -31,16 +30,27 @@
         form.addEventListener("submit", async (event) => {
             event.preventDefault();
             error.hidden = true;
-            const response = await fetch(form.action, { method: "POST", body: new FormData(form), credentials: "same-origin" });
-            let data = {};
-            try { data = await response.json(); } catch (_) {}
-            if (!response.ok) {
-                error.textContent = data.erro || "Não foi possível entrar.";
+            const button = form.querySelector('button[type="submit"]');
+            button.disabled = true;
+            button.textContent = "Entrando...";
+            try {
+                const response = await fetch(form.action, { method: "POST", body: new FormData(form), credentials: "same-origin" });
+                let data = {};
+                try { data = await response.json(); } catch (_) {}
+                if (!response.ok) {
+                    error.textContent = data.erro || "Não foi possível entrar.";
+                    error.hidden = false;
+                    return;
+                }
+                const next = form.elements.next.value;
+                window.location.assign(next.startsWith("/") && !next.startsWith("//") ? next : "/");
+            } catch (_) {
+                error.textContent = "Falha de conexão. Tente novamente.";
                 error.hidden = false;
-                return;
+            } finally {
+                button.disabled = false;
+                button.textContent = "Entrar →";
             }
-            const next = form.elements.next.value;
-            window.location.assign(next.startsWith("/") && !next.startsWith("//") ? next : "/");
         });
     </script>
 </body>

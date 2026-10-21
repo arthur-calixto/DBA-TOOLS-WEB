@@ -3,19 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Erro — Análise de Ambiente</title>
+    <title>Erro — DBA-TOOLS-WEB</title>
     <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/navigation.js" defer></script>
 </head>
 <body>
-    <div class="topbar">
-        <span class="pulse" style="background: var(--alerta); box-shadow: 0 0 0 3px var(--alerta-dim);"></span>
-        <span class="marca">ANÁLISE<span class="sub">/ambiente</span></span>
-        <nav><a href="/">← início</a></nav>
-    </div>
-    <main class="page">
+    {% set active_page = "error" %}
+    {% include "_header.html" %}
+    <main id="main-content" tabindex="-1" class="page">
         <div class="eyebrow">Sessão inválida</div>
         <h1>Não foi possível carregar a sessão</h1>
-        <p class="erro">{{ mensagem }}</p>
+        <p class="erro" role="alert">{{ mensagem }}</p>
     </main>
 </body>
 </html>

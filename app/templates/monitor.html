@@ -3,94 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Monitor de Consulta</title>
+    <title>Monitor de Consultas — DBA-TOOLS-WEB</title>
 
     <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/navigation.js" defer></script>
 
-    <style>
-        .upload-box {
-            background: var(--surface);
-            border: 1px dashed var(--border);
-            border-radius: var(--radius-lg);
-            padding: 1.5rem;
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            flex-wrap: wrap;
-        }
-
-        td.sql {
-            max-width: 480px;
-            overflow-wrap: break-word;
-            color: var(--text-muted);
-        }
-
-        .resumo-stats {
-            display: flex;
-            gap: 0.75rem;
-            margin: 1.25rem 0;
-            flex-wrap: wrap;
-        }
-
-        .stat {
-            background: var(--surface);
-            border: 1px solid var(--border-soft);
-            border-radius: var(--radius);
-            padding: 0.7rem 1.2rem;
-        }
-
-        .stat .numero {
-            font-family: var(--font-mono);
-            font-size: 1.3rem;
-            font-weight: 700;
-            color: var(--accent);
-        }
-
-        .stat .label {
-            font-size: 0.72rem;
-            color: var(--text-faint);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .btn-copiar {
-            background: transparent;
-            border: 1px solid var(--border);
-            color: var(--text-muted);
-            font-size: 0.7rem;
-            padding: 0.3rem 0.6rem;
-            white-space: nowrap;
-        }
-
-        .btn-copiar:hover {
-            border-color: var(--accent);
-            color: var(--accent);
-            background: transparent;
-        }
-
-        .btn-copiar.copiado {
-            border-color: var(--ok);
-            color: var(--ok);
-        }
-    </style>
 </head>
 
 <body>
 
-    <div class="topbar">
-        <span class="pulse"></span>
+    {% set active_page = "monitor" %}
+    {% include "_header.html" %}
 
-        <span class="marca">
-            ANÁLISE<span class="sub">/monitor</span>
-        </span>
-
-        <nav>
-            <a href="/">← início</a>
-            {% if settings is defined and settings.auth_enabled %}<button id="logout" class="btn-secundario">Sair</button>{% endif %}
-        </nav>
-    </div>
-
-    <main class="page">
+    <main id="main-content" tabindex="-1" class="page">
 
         <div class="eyebrow">Monitor de consulta</div>
 
@@ -102,11 +27,13 @@
         </div>
 
         <div class="upload-box">
-            <input type="file" id="arquivo" accept=".zip">
+            <div class="upload-field"><label for="arquivo">Arquivo do Monitor (.zip)</label>
+            <input type="file" id="arquivo" accept=".zip" aria-describedby="upload-help">
+            <span id="upload-help" class="field-help">Selecione o ZIP contendo Monitor_Consulta.log.</span></div>
             <button id="btn-analisar">Analisar</button>
         </div>
 
-        <div id="resultado"></div>
+        <div id="resultado" role="region" aria-label="Resultados da análise"></div>
 
     </main>
 
@@ -117,16 +44,6 @@
             const item = (document.cookie || "").split("; ").find(value => value.startsWith("dba_tools_csrf="));
             return item ? decodeURIComponent(item.slice("dba_tools_csrf=".length)) : "";
         }
-
-        const logout = document.getElementById("logout");
-        if (logout) logout.addEventListener("click", async () => {
-            const response = await fetch("/auth/logout", {
-                method: "POST",
-                headers: {"X-CSRF-Token": csrfToken()},
-                credentials: "same-origin"
-            });
-            if (response.ok) window.location.assign("/login");
-        });
 
         const btn = document.getElementById("btn-analisar");
         const inputArquivo = document.getElementById("arquivo");
@@ -143,7 +60,7 @@
             }
 
             let html = `
-                <table>
+                <div class="table-scroll" role="region" aria-label="Queries mais lentas" tabindex="0"><table class="monitor-table">
                     <thead>
                         <tr>
                             <th>ID</th>
@@ -151,7 +68,7 @@
                             <th>Application</th>
                             <th>ResourceID</th>
                             <th>SQL</th>
-                            <th></th>
+                            <th><span class="sr-only">Ações</span></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -180,7 +97,7 @@
 
             html += `
                     </tbody>
-                </table>
+                </table></div>
             `;
 
             return html;
@@ -335,7 +252,7 @@
             if (!inputArquivo.files.length) {
 
                 resultadoDiv.innerHTML =
-                    '<p class="erro">Selecione o arquivo .zip primeiro.</p>';
+                    '<p class="erro" role="alert">Selecione o arquivo .zip primeiro.</p>';
 
                 return;
             }
@@ -394,7 +311,7 @@
                     }
 
                     resultadoDiv.innerHTML = `
-                        <p class="erro">
+                        <p class="erro" role="alert">
                             ${escapeHTML(data.erro || "Não foi possível analisar o arquivo.")}
                         </p>
                     `;
@@ -475,7 +392,7 @@
             } catch (e) {
 
                 resultadoDiv.innerHTML = `
-                    <p class="erro">
+                    <p class="erro" role="alert">
                         Falha ao analisar o arquivo. Tente novamente.
                     </p>
                 `;

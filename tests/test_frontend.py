@@ -60,6 +60,7 @@ class FrontendTests(unittest.TestCase):
                                payload=detail)['result']
         self.assert_safe(rendered)
         self.assertIn('data-pills="pills-0"', rendered)
+        self.assertIn('<button type="button" class="pill pill-mais"', rendered)
         result = self.run_js('dashboard', '''(() => {
             renderContagem([{DETALHE:payload}]);
             resultadoDiv.listeners.click({target:{closest:()=>({dataset:{pills:'pills-0'}})}});
@@ -85,8 +86,8 @@ class FrontendTests(unittest.TestCase):
         rendered = templates.env.get_template('monitor.html').render(settings=type('Settings', (), {'auth_enabled': True})())
         self.assertIn('"X-CSRF-Token": csrfToken()', rendered)
         self.assertIn('credentials: "same-origin"', rendered)
-        self.assertIn('fetch("/auth/logout"', rendered)
-        self.assertIn('window.location.assign("/login")', rendered)
+        self.assertIn('/static/navigation.js', rendered)
+        self.assertIn('id="logout"', rendered)
 
     def test_successful_dashboard_render_and_pdf_state(self):
         response = {'locks': [{PAYLOAD: PAYLOAD}]}
@@ -147,3 +148,47 @@ class FrontendTests(unittest.TestCase):
                     self.assertIn(response['referencia'], alert)
                 self.assertEqual(result['result']['original'], PAYLOAD)
                 self.assertFalse(result['result']['disabled'])
+
+    def test_shared_logout_preserves_csrf_and_displays_failure(self):
+        for values in [{'ok': True}, {'ok': False}, {'networkFailure': True}]:
+            with self.subTest(values=values):
+                completed = subprocess.run(['node', str(ROOT / 'tests/navigation_runner.js')],
+                    input=json.dumps(values), text=True, capture_output=True, check=True, cwd=ROOT)
+                result = json.loads(completed.stdout)
+                fetch = result['captured']
+                self.assertEqual(fetch['url'], '/auth/logout')
+                self.assertEqual(fetch['options']['headers']['X-CSRF-Token'], 'synthetic-csrf')
+                self.assertEqual(fetch['options']['credentials'], 'same-origin')
+                self.assertFalse(result['disabled'])
+                if values.get('ok'):
+                    self.assertEqual(fetch['location'], '/login')
+                else:
+                    self.assertNotIn('location', fetch)
+                    self.assertTrue(result['text'])
+
+    def test_technical_tables_are_keyboard_scrollable(self):
+        for page, action in [('dashboard', 'renderTabela([{SQL:payload}])'),
+                             ('monitor', 'renderTabelaQueries([{SQL:payload}])')]:
+            rendered = self.run_js(page, action, payload=PAYLOAD)['result']
+            attributes = self.assert_safe(rendered).attributes
+            self.assertIn(('tabindex', '0'), attributes)
+            self.assertIn(('role', 'region'), attributes)
+
+    def test_brand_palette_and_local_font_contrast(self):
+        css = (ROOT / 'app/static/styles.css').read_text()
+        for color in ['#00888E', '#08469C', '#16D1DB', '#FA8170']:
+            self.assertIn(color, css)
+        self.assertNotIn('@import', css)
+        for font in ['Lato-Regular.ttf', 'Lato-Bold.ttf']:
+            self.assertTrue((ROOT / 'app/static/fonts' / font).is_file())
+        self.assertTrue((ROOT / 'app/static/fonts/LICENSE-Lato.txt').is_file())
+        tokens = dict(re.findall(r'--([a-z-]+):\s*(#[a-fA-F0-9]{6});', css))
+        def luminance(hex_value):
+            rgb = [int(hex_value[i:i+2], 16) / 255 for i in (1, 3, 5)]
+            return sum(weight * (part/12.92 if part <= .04045 else ((part+.055)/1.055)**2.4)
+                       for weight, part in zip([.2126, .7152, .0722], rgb))
+        for foreground, background in [('text','surface'), ('text-muted','surface'),
+                ('text-faint','bg'), ('brand-blue','surface'), ('surface','brand-blue'),
+                ('alerta','alerta-dim'), ('ok','ok-dim'), ('accent-ink','bg')]:
+            values = sorted([luminance(tokens[foreground]), luminance(tokens[background])])
+            self.assertGreaterEqual((values[1]+.05)/(values[0]+.05), 4.5, (foreground, background))

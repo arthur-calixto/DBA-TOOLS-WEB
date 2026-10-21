@@ -5,15 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Análise de Ambiente — {{ cliente_id }}</title>
     <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/navigation.js" defer></script>
 </head>
 <body>
-    <div class="topbar">
-        <span class="pulse"></span>
-        <span class="marca">ANÁLISE<span class="sub">/ambiente</span></span>
-        <nav><a href="/">← início</a></nav>
-    </div>
+    {% set active_page = "diagnostics" %}
+    {% include "_header.html" %}
 
-    <main class="page">
+    <main id="main-content" tabindex="-1" class="page">
         <div class="eyebrow">Análise geral do ambiente</div>
         <h1>{{ cliente_id }}</h1>
         <div class="meta">Banco: <strong>{{ db_type }}</strong></div>
@@ -21,7 +19,7 @@
         <button id="btn-executar">Executar Análise</button>
         <button id="btn-pdf" class="btn-secundario" style="display:none;">Baixar Relatório PDF</button>
         <div id="resumo"></div>
-        <div id="resultado"></div>
+        <div id="resultado" role="region" aria-label="Resultados da análise"></div>
     </main>
 
     <script src="/static/safe-html.js"></script>
@@ -39,14 +37,14 @@
             if (!linhas || linhas.length === 0) return "<p>Nenhum resultado.</p>";
             const temStatus = "STATUS" in linhas[0];
             const colunas = Object.keys(linhas[0]).filter(c => c !== "STATUS");
-            let html = "<table><thead><tr>";
+            let html = '<div class="table-scroll" role="region" aria-label="Dados do diagnóstico" tabindex="0"><table><thead><tr>';
             colunas.forEach(c => html += `<th>${escapeHTML(c)}</th>`);
             html += "</tr></thead><tbody>";
             linhas.forEach(row => {
                 const classe = temStatus && String(row.STATUS).toLowerCase() === "alerta" ? ' class="alerta"' : "";
-                html += `<tr${classe}>` + colunas.map(c => `<td>${escapeHTML(row[c])}</td>`).join("") + "</tr>";
+                html += `<tr${classe}>` + colunas.map((c, index) => `<td>${classe && index === 0 ? '<span class="status-label alerta">Alerta</span> ' : ''}${escapeHTML(row[c])}</td>`).join("") + "</tr>";
             });
-            html += "</tbody></table>";
+            html += "</tbody></table></div>";
             return html;
         }
 
@@ -61,6 +59,7 @@
                 html += `
                     <div class="card ${status}">
                         <div class="titulo">${escapeHTML(row.PARAMETRO)}</div>
+                        <span class="status-label ${status}">${({ok: "OK", alerta: "Alerta", indefinido: "Sem baseline"})[status]}</span>
                         <div class="linha"><span>Esperado</span><span class="valor">${escapeHTML(esperado)}</span></div>
                         <div class="linha"><span>Atual</span><span class="valor">${escapeHTML(atual)}</span></div>
                     </div>`;
@@ -96,7 +95,7 @@
                     pillsHtml = `<div class="pill-list" id="${idPills}">` +
                         visiveis.map(i => `<span class="pill">${escapeHTML(i)}</span>`).join("") +
                         (ocultos.length
-                            ? `<span class="pill pill-mais" data-pills="${idPills}">+${ocultos.length} mais</span>`
+                            ? `<button type="button" class="pill pill-mais" data-pills="${idPills}">+${ocultos.length} mais</button>`
                             : "") +
                         `</div>`;
                 }
@@ -176,7 +175,7 @@
                 const resp = await fetch(`/analise/${encodeURIComponent(sessionId)}/executar`, { method: "POST" });
                 const data = await resp.json();
                 if (!resp.ok || data.erro) {
-                    resultadoDiv.innerHTML = `<p class="erro">${escapeHTML(mensagemErro(data, "Falha ao executar análise."))}</p>`;
+                    resultadoDiv.innerHTML = `<p class="erro" role="alert">${escapeHTML(mensagemErro(data, "Falha ao executar análise."))}</p>`;
                     return;
                 }
 
@@ -188,7 +187,7 @@
                     const erro = data[`${check.id}_erro`];
                     let corpo;
                     if (erro) {
-                        corpo = `<p class="erro">Erro: ${escapeHTML(erro)}</p>`;
+                        corpo = `<p class="erro" role="alert">Erro: ${escapeHTML(erro)}</p>`;
                     } else if (check.exibicao === "cards") {
                         corpo = renderCards(data[check.id]);
                     } else if (check.exibicao === "contagem") {
@@ -199,7 +198,7 @@
                     resultadoDiv.innerHTML += `<section><h2>${escapeHTML(check.titulo)}</h2>${corpo}</section>`;
                 });
             } catch (e) {
-                resultadoDiv.innerHTML = '<p class="erro">Falha ao executar análise. Tente novamente.</p>';
+                resultadoDiv.innerHTML = '<p class="erro" role="alert">Falha ao executar análise. Tente novamente.</p>';
             } finally {
                 btn.disabled = false;
                 btn.textContent = "Executar Análise";

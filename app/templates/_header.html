@@ -1,0 +1,20 @@
+<a class="skip-link" href="#main-content">Pular para o conteúdo</a>
+<header class="topbar">
+    <a class="marca" href="/" aria-label="DBA-TOOLS-WEB — início">
+        <span class="brand-mark" aria-hidden="true">DBA</span>
+        <span>TOOLS<span class="sub"> / WEB</span></span>
+    </a>
+    {% if active_page == 'login' %}
+    <span class="header-caption">Acesso interno · Ferramentas de diagnóstico</span>
+    {% else %}
+    <nav aria-label="Navegação principal">
+        <a href="/"{% if active_page == 'home' %} aria-current="page"{% endif %}>Início</a>
+        <a href="/#clientes"{% if active_page == 'diagnostics' %} aria-current="page"{% endif %}>Análise de Ambiente</a>
+        <a href="/monitor"{% if active_page == 'monitor' %} aria-current="page"{% endif %}>Monitor de Consultas</a>
+    </nav>
+    {% if (settings is defined and settings.auth_enabled) or (request is defined and request.state.auth_user is defined) %}
+    <button id="logout" class="btn-secundario" type="button">Sair</button>
+    <span id="navigation-status" role="alert" class="navigation-status"></span>
+    {% endif %}
+    {% endif %}
+</header>
