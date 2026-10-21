@@ -1,6 +1,6 @@
 import uvicorn
 from fastapi import Depends, FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.exceptions import RequestValidationError
@@ -11,8 +11,7 @@ from app.routes import analise, monitor, auth
 from app.session import listar_clientes
 from app.errors import PublicHTTPException, SafeErrors
 from app.request_limits import RequestSizeLimit
-from app.auth import SessionRenewalMiddleware
-from app.auth import require_authenticated
+from app.auth import AuthenticationRequired, SessionRenewalMiddleware, require_authenticated
 
 app = FastAPI(title="Análise de Ambiente Sankhya")
 app.add_middleware(RequestSizeLimit)
@@ -33,12 +32,16 @@ async def invalid_request(request, exc):
 
 @app.exception_handler(HTTPException)
 async def http_error(request, exc):
+    if isinstance(exc, AuthenticationRequired):
+        from urllib.parse import quote
+        return RedirectResponse(f"/login?next={quote(exc.next_path, safe='/')}", status_code=303)
     if isinstance(exc, PublicHTTPException):
         content = {"erro": exc.detail}
         if exc.reference:
             content["referencia"] = exc.reference
         return JSONResponse(content, status_code=exc.status_code)
-    messages = {400: "Requisição inválida.", 404: "Cliente ou recurso não encontrado.",
+    messages = {400: "Requisição inválida.", 401: "Autenticação necessária.",
+                403: "Acesso negado.", 404: "Cliente ou recurso não encontrado.",
                 413: "Requisição excede o limite permitido.",
                 422: "Dados da requisição inválidos.",
                 500: "Não foi possível concluir a operação."}
@@ -49,8 +52,17 @@ async def http_error(request, exc):
 @app.get("/", response_class=HTMLResponse)
 def tela_inicial(request: Request, _=Depends(require_authenticated)):
     return templates.TemplateResponse(
-        request, "index.html", {"clientes": listar_clientes()}
+        request, "index.html", {"clientes": listar_clientes(), "settings": settings}
     )
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request, next: str = "/"):
+    from urllib.parse import unquote
+    target = unquote(next)
+    if not target.startswith("/") or target.startswith("//"):
+        target = "/"
+    return templates.TemplateResponse(request, "login.html", {"next": target})
 
 
 @app.get("/health")

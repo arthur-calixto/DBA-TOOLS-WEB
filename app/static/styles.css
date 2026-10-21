@@ -305,6 +305,12 @@ tr.alerta td:first-child { padding-left: calc(0.8rem - 3px); }
 .form-sessao { margin-top: 1.5rem; display: flex; gap: 0.5rem; max-width: 420px; }
 .form-sessao input { flex: 1; }
 
+.login-page { max-width: 520px; }
+.login-form { display: grid; gap: 0.55rem; max-width: 390px; margin-top: 2rem; }
+.login-form label { color: var(--text-muted); font-family: var(--font-mono); font-size: 0.75rem; }
+.login-form input { width: 100%; margin-bottom: 0.65rem; }
+.login-form button { justify-self: start; margin-top: 0.5rem; }
+
 /* ---------------------------------------------------------------- responsivo */
 @media (max-width: 640px) {
     main, .page { padding: 1.25rem 1rem 3rem; }

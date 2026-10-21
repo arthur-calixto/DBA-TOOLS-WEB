@@ -29,6 +29,12 @@ class AuthenticationUnavailable(RuntimeError):
     pass
 
 
+class AuthenticationRequired(HTTPException):
+    def __init__(self, next_path: str = "/"):
+        super().__init__(401, "Autenticação necessária.")
+        self.next_path = next_path
+
+
 @dataclass(frozen=True)
 class AuthenticatedUser:
     id: int
@@ -118,6 +124,8 @@ def current_user(request: Request) -> AuthenticatedUser | None:
         return None
     token = request.cookies.get(settings.auth_cookie_name)
     if not token:
+        if request.method == "GET" and "text/html" in request.headers.get("accept", ""):
+            raise AuthenticationRequired(request.url.path)
         raise HTTPException(401, "Autenticação necessária.")
     payload = _decode_session(token)
     user = _load_user(payload)

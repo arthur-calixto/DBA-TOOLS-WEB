@@ -28,9 +28,10 @@ def login(response: Response, username: str = Form(...), password: str = Form(..
 
 
 @router.post("/logout")
-def logout(response: Response, _: None = Depends(validate_csrf)):
-    clear_session_cookie(response)
-    return {"ok": True}
+def logout(_: None = Depends(validate_csrf)):
+    result = JSONResponse({"ok": True})
+    clear_session_cookie(result)
+    return result
 
 
 @router.post("/users")

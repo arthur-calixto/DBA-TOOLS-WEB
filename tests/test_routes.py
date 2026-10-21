@@ -32,6 +32,18 @@ class RouteTests(unittest.TestCase):
         self.assertIn('Cliente Teste', request(app, '/').text)
         self.assertEqual(request(app, '/health').json(), {'status': 'ok'})
 
+    def test_login_page_and_html_auth_redirect_preserve_api_json(self):
+        with patch.object(settings, 'auth_enabled', True):
+            login = request(app, '/login')
+            self.assertEqual(login.status, 200)
+            self.assertIn('Entrar no painel', login.text)
+            page = request(app, '/', headers={b'accept': b'text/html'})
+            self.assertEqual(page.status, 303)
+            self.assertIn('/login?next=/', page.headers[b'location'].decode())
+            api = request(app, '/analise/Cliente Teste/executar', 'POST')
+            self.assertEqual(api.status, 401)
+            self.assertEqual(api.json()['erro'], 'Autenticação necessária.')
+
     def test_all_diagnostics_use_correct_sql_for_both_dialects(self):
         for dialect in ['oracle', 'sqlserver']:
             self.path.write_text(json.dumps(dict(CREDENTIALS, db_type=dialect)))

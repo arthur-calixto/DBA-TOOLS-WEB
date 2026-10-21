@@ -48,6 +48,7 @@
     <div class="topbar">
         <span class="pulse"></span>
         <span class="marca">ANÁLISE<span class="sub">/ambiente</span></span>
+        {% if settings.auth_enabled %}<button id="logout" class="btn-secundario">Sair</button>{% endif %}
     </div>
 
     <main class="page">
@@ -108,6 +109,12 @@
     </main>
 
     <script>
+        const logout = document.getElementById("logout");
+        if (logout) logout.addEventListener("click", async () => {
+            const csrf = document.cookie.split("; ").find(v => v.startsWith("dba_tools_csrf="))?.split("=")[1] || "";
+            const response = await fetch("/auth/logout", {method: "POST", headers: {"X-CSRF-Token": csrf}, credentials: "same-origin"});
+            if (response.ok) window.location.assign("/login");
+        });
         const input = document.getElementById("busca-cliente");
         const itens = Array.from(document.querySelectorAll(".cliente-item"));
         const contador = document.getElementById("contador-clientes");
