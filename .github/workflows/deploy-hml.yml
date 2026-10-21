@@ -6,6 +6,11 @@ on:
         description: 'Commit da develop a validar e implantar'
         required: true
         type: string
+      allow_app_rollback_after_migration:
+        description: 'Confirme SOMENTE se a imagem anterior for compatível com o novo schema'
+        required: true
+        default: false
+        type: boolean
 permissions:
   contents: read
 concurrency:
@@ -60,7 +65,9 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: ${{ steps.image.outputs.name }}:hml-${{ inputs.revision }}-${{ github.run_id }}-${{ github.run_attempt }}
-          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ inputs.revision }}
       - name: Registrar imagem publicada
         env:
           IMAGE: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
@@ -69,7 +76,7 @@ jobs:
     needs: test-and-build
     runs-on: [self-hosted, linux, x64, analise-producao]
     environment: homologation
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: read
@@ -78,10 +85,16 @@ jobs:
       HML_ENV_FILE: ${{ vars.HML_ENV_FILE }}
       HML_DATA_DIR: ${{ vars.HML_DATA_DIR }}
       HML_COMPOSE_PROJECT_NAME: ${{ vars.HML_COMPOSE_PROJECT_NAME }}
+      HML_PERSISTENCE_PROJECT_NAME: ${{ vars.HML_PERSISTENCE_PROJECT_NAME }}
+      HML_EXPECTED_DATABASE: ${{ vars.HML_EXPECTED_DATABASE }}
+      HML_BACKUP_DIR: ${{ vars.HML_BACKUP_DIR }}
+      HML_DEPLOY_SHA: ${{ inputs.revision }}
+      HML_APP_ROLLBACK_SCHEMA_COMPATIBLE: ${{ inputs.allow_app_rollback_after_migration }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.revision }}
+          # Orquestração da revisão do workflow; migrations vêm da imagem-alvo.
+          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Preparar autenticação temporária
         run: echo "DOCKER_CONFIG=$RUNNER_TEMP/docker-auth-hml-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
@@ -89,7 +102,7 @@ jobs:
         env:
           GHCR_TOKEN: ${{ github.token }}
         run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-      - name: Atualizar homologação
+      - name: Backup verificado, migration e atualização de homologação
         run: bash scripts/deploy-hml.sh
       - name: Limpar autenticação temporária
         if: always()
