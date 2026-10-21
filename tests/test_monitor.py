@@ -112,7 +112,8 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(request(app, '/monitor/analisar', 'POST').status, 422)
 
     def test_monitor_upload_ignores_global_request_limit(self):
-        content = archive([('unused', 'x' * (11 * 1024 * 1024))], compression=zipfile.ZIP_STORED)
+        content = archive([('Monitor_Consulta.log', LOG),
+                           ('unused', 'x' * (11 * 1024 * 1024))], compression=zipfile.ZIP_STORED)
         with patch.object(settings, 'max_request_bytes', 10), patch.object(settings, 'max_upload_bytes', 10):
             response = self.upload(content, headers={b'content-length': b'99999999'})
         self.assertEqual(response.status, 200)
