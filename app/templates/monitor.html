@@ -86,6 +86,7 @@
 
         <nav>
             <a href="/">← início</a>
+            {% if settings is defined and settings.auth_enabled %}<button id="logout" class="btn-secundario">Sair</button>{% endif %}
         </nav>
     </div>
 
@@ -111,6 +112,21 @@
 
     <script src="/static/safe-html.js"></script>
     <script>
+
+        function csrfToken() {
+            const item = (document.cookie || "").split("; ").find(value => value.startsWith("dba_tools_csrf="));
+            return item ? decodeURIComponent(item.slice("dba_tools_csrf=".length)) : "";
+        }
+
+        const logout = document.getElementById("logout");
+        if (logout) logout.addEventListener("click", async () => {
+            const response = await fetch("/auth/logout", {
+                method: "POST",
+                headers: {"X-CSRF-Token": csrfToken()},
+                credentials: "same-origin"
+            });
+            if (response.ok) window.location.assign("/login");
+        });
 
         const btn = document.getElementById("btn-analisar");
         const inputArquivo = document.getElementById("arquivo");
@@ -354,7 +370,9 @@
                     "/monitor/analisar",
                     {
                         method: "POST",
-                        body: formData
+                        body: formData,
+                        headers: {"X-CSRF-Token": csrfToken()},
+                        credentials: "same-origin"
                     }
                 );
 
@@ -369,6 +387,11 @@
                  * Trata erro retornado pelo backend
                  */
                 if (!resp.ok || data.erro) {
+
+                    if (resp.status === 401) {
+                        window.location.assign("/login?next=/monitor");
+                        return;
+                    }
 
                     resultadoDiv.innerHTML = `
                         <p class="erro">

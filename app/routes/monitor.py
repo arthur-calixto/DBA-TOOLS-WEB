@@ -24,7 +24,7 @@ _processing_slots = threading.BoundedSemaphore(settings.monitor_max_concurrent)
 
 @router.get("", response_class=HTMLResponse)
 def tela_upload(request: Request):
-    return templates.TemplateResponse(request, "monitor.html")
+    return templates.TemplateResponse(request, "monitor.html", {"settings": settings})
 
 
 def _check_directory(stream, deadline: float) -> None:

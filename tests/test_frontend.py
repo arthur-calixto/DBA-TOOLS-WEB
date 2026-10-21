@@ -81,6 +81,13 @@ class FrontendTests(unittest.TestCase):
         })()''', payload=PAYLOAD)
         self.assertEqual(result['captured']['clipboard'], PAYLOAD)
 
+    def test_monitor_upload_and_logout_send_session_security_headers(self):
+        rendered = templates.env.get_template('monitor.html').render(settings=type('Settings', (), {'auth_enabled': True})())
+        self.assertIn('"X-CSRF-Token": csrfToken()', rendered)
+        self.assertIn('credentials: "same-origin"', rendered)
+        self.assertIn('fetch("/auth/logout"', rendered)
+        self.assertIn('window.location.assign("/login")', rendered)
+
     def test_successful_dashboard_render_and_pdf_state(self):
         response = {'locks': [{PAYLOAD: PAYLOAD}]}
         result = self.run_js('dashboard', 'btn.listeners.click()', response=response)
