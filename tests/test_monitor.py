@@ -35,42 +35,30 @@ class MonitorTests(unittest.TestCase):
                 self.assertEqual(response.status, status)
                 self.assertNotIn('secret.html', response.text)
 
-    def test_zip_entry_limit(self):
-        with patch.object(settings, 'zip_max_entries', 1):
-            self.assertEqual(self.upload(archive([('a', 'a'), ('Monitor_Consulta.log', LOG)])).status, 413)
-
-    def test_uncompressed_total_limit_includes_unused_entries(self):
-        with patch.object(settings, 'monitor_max_uncompressed_bytes', len(LOG.encode()) + 2):
-            self.assertEqual(self.upload(archive([('Monitor_Consulta.log', LOG), ('unused', '123')])).status, 413)
-
-    def test_large_monitor_uncompressed_content_uses_specific_limit(self):
-        content = archive([('Monitor_Consulta.log', LOG), ('unused', 'x' * (33 * 1024 * 1024))],
-                          compression=zipfile.ZIP_STORED)
-        with patch.object(settings, 'monitor_max_uncompressed_bytes', 64 * 1024 * 1024):
+    def test_former_limits_do_not_reject_valid_monitor(self):
+        content = archive([('Monitor_Consulta.log', LOG)] + [(str(i), 'x') for i in range(201)])
+        with patch.object(settings, 'zip_max_entries', 1), patch.object(settings, 'zip_max_ratio', 1), patch.object(settings, 'monitor_max_uncompressed_bytes', 1), patch.object(settings, 'monitor_max_log_bytes', 1), patch.object(settings, 'monitor_max_records', 1), patch.object(settings, 'monitor_processing_seconds', 0.000001):
             self.assertEqual(self.upload(content).status, 200)
 
-    def test_monitor_uncompressed_limit_still_rejects_excessive_content(self):
-        content = archive([('Monitor_Consulta.log', LOG), ('unused', 'x' * (2 * 1024 * 1024))],
-                          compression=zipfile.ZIP_STORED)
-        with patch.object(settings, 'monitor_max_uncompressed_bytes', 1024 * 1024):
-            self.assertEqual(self.upload(content).status, 413)
+    def test_large_compressed_auxiliary_is_not_decompressed(self):
+        content = io.BytesIO()
+        with zipfile.ZipFile(content, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr('Monitor_Consulta.log', LOG)
+            with zf.open('unused', 'w') as stream:
+                for _ in range(257):
+                    stream.write(b'x' * (1024 * 1024))
+        self.assertEqual(self.upload(content.getvalue()).status, 200)
 
-    def test_compression_ratio_limit(self):
-        with patch.object(settings, 'zip_max_ratio', 2):
-            response = self.upload(archive([('Monitor_Consulta.log', 'x' * 10000)]))
-        self.assertEqual(response.status, 413)
-
-    def test_log_size_limit_is_preserved(self):
-        with patch.object(settings, 'monitor_max_log_bytes', 10):
-            self.assertEqual(self.upload().status, 413)
-
-    def test_record_limit(self):
-        with patch.object(settings, 'monitor_max_records', 1):
-            self.assertEqual(self.upload().status, 413)
-
-    def test_deadline(self):
-        with patch('app.routes.monitor.monotonic', return_value=0):
-            self.assertEqual(self.upload().status, 413)
+    def test_selected_log_above_previous_256_mib_limit(self):
+        content = io.BytesIO()
+        with zipfile.ZipFile(content, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+            with zf.open('Monitor_Consulta.log', 'w') as stream:
+                for _ in range(257):
+                    stream.write(b' ' * (1024 * 1024))
+                stream.write(LOG.encode())
+        response = self.upload(content.getvalue())
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.json()['total_registros'], 2)
 
     def test_path_traversal_and_duplicate_log_rejected(self):
         for entries in [[('../Monitor_Consulta.log', LOG)],
@@ -114,7 +102,7 @@ class MonitorTests(unittest.TestCase):
     def test_unknown_exception_is_generic_and_releases_slot(self):
         slot = threading.BoundedSemaphore(1)
         with patch('app.routes.monitor._processing_slots', slot):
-            with patch('app.routes.monitor.parse_consulta_log', side_effect=Exception('SYNTHETIC_SECRET')), self.assertLogs('app.errors'):
+            with patch('app.routes.monitor.analyze_archive', side_effect=Exception('SYNTHETIC_SECRET')), self.assertLogs('app.errors'):
                 response = self.upload()
             self.assertEqual(response.status, 500)
             self.assertNotIn('SYNTHETIC_SECRET', response.text)
@@ -139,12 +127,11 @@ class MonitorTests(unittest.TestCase):
             response = request(app, '/analise/anything/relatorio', 'POST', b'x' * 11)
         self.assertEqual(response.status, 413)
 
-    def test_directory_limit_checked_before_zipfile_allocation_even_with_forged_count(self):
+    def test_forged_directory_count_is_rejected(self):
         content = bytearray(archive([('unused', 'x'), ('Monitor_Consulta.log', LOG)]))
         end = content.rfind(b'PK\x05\x06')
         struct.pack_into('<HH', content, end + 8, 1, 1)
-        with patch.object(settings, 'zip_max_entries', 1), patch('app.routes.monitor.zipfile.ZipFile', side_effect=AssertionError('Directory must be limited first')):
-            self.assertEqual(self.upload(bytes(content)).status, 413)
+        self.assertEqual(self.upload(bytes(content)).status, 400)
 
     def test_large_multipart_spool_is_replayed_correctly(self):
         content = archive([('Monitor_Consulta.log', LOG), ('unused', 'x' * (1024 * 1024 + 1))],
