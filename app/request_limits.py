@@ -16,7 +16,9 @@ class RequestSizeLimit:
         if scope["type"] != "http" or scope.get("method") != "POST":
             return await self.app(scope, receive, send)
         if path.rstrip("/") == "/monitor/analisar":
-            limit = settings.max_request_bytes
+            # O ZIP do Monitor é validado por streaming na rota, com limites
+            # estruturais próprios; não aplicar limite artificial ao corpo HTTP.
+            limit = None
             is_report = False
         elif path.startswith("/analise/") and path.rstrip("/").endswith("/relatorio"):
             limit = settings.max_report_bytes
@@ -39,7 +41,7 @@ class RequestSizeLimit:
                     declared = int(value)
                     if declared < 0:
                         raise ValueError()
-                    if declared > limit:
+                    if limit is not None and declared > limit:
                         return await reject()
                 except ValueError:
                     await JSONResponse({"erro": "Tamanho da requisição inválido."},
@@ -54,7 +56,7 @@ class RequestSizeLimit:
                     return
                 chunk = message.get("body", b"")
                 total += len(chunk)
-                if total > limit:
+                if limit is not None and total > limit:
                     return await reject()
                 await run_in_threadpool(body.write, chunk)
                 if not message.get("more_body", False):

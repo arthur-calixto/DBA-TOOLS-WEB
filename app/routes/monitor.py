@@ -72,10 +72,6 @@ def _check_directory(stream, deadline: float) -> None:
 def _read_log(arquivo: UploadFile, deadline: float) -> str:
     if not arquivo.filename or not arquivo.filename.lower().endswith(".zip"):
         raise ValueError("Envie um arquivo ZIP válido.")
-    arquivo.file.seek(0, 2)
-    if arquivo.file.tell() > settings.max_upload_bytes:
-        raise MonitorLimitExceeded("Arquivo enviado excede o limite permitido.")
-    arquivo.file.seek(0)
     _check_directory(arquivo.file, deadline)
     with zipfile.ZipFile(arquivo.file) as zf:
         entries = zf.infolist()

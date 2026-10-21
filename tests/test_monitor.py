@@ -48,10 +48,9 @@ class MonitorTests(unittest.TestCase):
             response = self.upload(archive([('Monitor_Consulta.log', 'x' * 10000)]))
         self.assertEqual(response.status, 413)
 
-    def test_log_and_upload_size_limits(self):
-        for option in ['monitor_max_log_bytes', 'max_upload_bytes']:
-            with self.subTest(option=option), patch.object(settings, option, 10):
-                self.assertEqual(self.upload().status, 413)
+    def test_log_size_limit_is_preserved(self):
+        with patch.object(settings, 'monitor_max_log_bytes', 10):
+            self.assertEqual(self.upload().status, 413)
 
     def test_record_limit(self):
         with patch.object(settings, 'monitor_max_records', 1):
@@ -112,16 +111,11 @@ class MonitorTests(unittest.TestCase):
     def test_missing_multipart_file(self):
         self.assertEqual(request(app, '/monitor/analisar', 'POST').status, 422)
 
-    def test_declared_request_size_is_rejected_before_parsing(self):
-        with patch.object(settings, 'max_request_bytes', 10):
-            response = self.upload(headers={b'content-length': b'9999'})
-        self.assertEqual(response.status, 413)
-
-    def test_chunked_and_lying_content_length_are_counted(self):
-        for headers in [{}, {b'content-length': b'1'}]:
-            with self.subTest(headers=headers), patch.object(settings, 'max_request_bytes', 10):
-                response = self.upload(headers=headers, chunks=[b'a' * 6, b'b' * 6])
-                self.assertEqual(response.status, 413)
+    def test_monitor_upload_ignores_global_request_limit(self):
+        content = archive([('unused', 'x' * (11 * 1024 * 1024))], compression=zipfile.ZIP_STORED)
+        with patch.object(settings, 'max_request_bytes', 10), patch.object(settings, 'max_upload_bytes', 10):
+            response = self.upload(content, headers={b'content-length': b'99999999'})
+        self.assertEqual(response.status, 200)
 
     def test_valid_chunked_upload_replayed_and_report_body_limited(self):
         body, headers = multipart(archive())
@@ -150,5 +144,5 @@ class MonitorTests(unittest.TestCase):
 
     def test_exact_upload_log_record_and_total_limits_are_accepted(self):
         content = archive()
-        with patch.object(settings, 'max_upload_bytes', len(content)), patch.object(settings, 'monitor_max_log_bytes', len(LOG.encode())), patch.object(settings, 'zip_max_uncompressed_bytes', len(LOG.encode())), patch.object(settings, 'monitor_max_records', 2):
+        with patch.object(settings, 'monitor_max_log_bytes', len(LOG.encode())), patch.object(settings, 'zip_max_uncompressed_bytes', len(LOG.encode())), patch.object(settings, 'monitor_max_records', 2):
             self.assertEqual(self.upload(content).status, 200)
