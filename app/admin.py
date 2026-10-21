@@ -4,6 +4,7 @@ import argparse
 import getpass
 
 from app.auth import hash_password
+from app.audit import record
 from app.persistence.database import session_scope
 from app.persistence.models import User
 
@@ -16,7 +17,10 @@ def create_admin(username: str) -> None:
     with session_scope() as session:
         if session.query(User).filter(User.username == username).first():
             raise SystemExit("Usuário já existe.")
-        session.add(User(username=username, password_hash=hash_password(password), is_admin=True, permissions={"admin": True}))
+        user = User(username=username, password_hash=hash_password(password), is_admin=True, permissions={}, role="leitura", access_scopes={})
+        session.add(user)
+        session.flush()
+        record(session, "user.bootstrap", "success", user.id, user.id)
     print(f"Administrador criado: {username}")
 
 

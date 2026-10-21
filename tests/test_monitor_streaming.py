@@ -34,7 +34,7 @@ class StreamingMonitorTests(unittest.TestCase):
 
     def test_authenticated_login_and_multipart_csrf(self):
         user = SimpleNamespace(id=1, username='synthetic', is_admin=True,
-                               is_active=True, permissions={}, auth_version=1,
+                               is_active=True, permissions={}, role="dba", access_scopes={}, auth_version=1,
                                password_hash=hash_password('synthetic-password'))
         session = MagicMock()
         session.query.return_value.filter.return_value.first.return_value = user
@@ -46,11 +46,23 @@ class StreamingMonitorTests(unittest.TestCase):
 
         tokens = []
 
-        def issue(value):
-            token = issue_session(value)
+        def issue(value, db_session):
+            token = issue_session(value, db_session)
             tokens.append(token)
             return token
 
+        from app.auth import _decode_session, _session_hash
+        from app.persistence.models import User, AuthSession
+
+        def scalar(statement):
+            if statement.column_descriptions[0]['entity'] is User:
+                return user
+            payload = _decode_session(tokens[0])
+            return AuthSession(id_hash=_session_hash(payload), user_id=user.id,
+                               auth_version=user.auth_version, created_at=payload['iat'],
+                               expires_at=payload['exp'])
+
+        session.scalar.side_effect = scalar
         with patch.multiple(settings, auth_enabled=True, auth_session_key=Fernet.generate_key().decode(), public_base_url='http://test', auth_cookie_secure=False), patch('app.auth.session_scope', scope), patch('app.routes.auth.session_scope', scope), patch('app.routes.auth.issue_session', issue):
             login = request(app, '/auth/login', 'POST',
                             b'username=synthetic&password=synthetic-password',

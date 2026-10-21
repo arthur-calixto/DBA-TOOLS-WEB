@@ -47,10 +47,10 @@ class AuthTests(unittest.TestCase):
             hash_password("curta")
 
     def test_encrypted_session_has_expiration_and_tamper_protection(self):
-        from app.auth import _decode_session, issue_session
+        from app.auth import _decode_session, _issue_session
 
         user = type("User", (), {"id": 4, "auth_version": 3})()
-        token = issue_session(user)
+        token = _issue_session(user.id, user.auth_version)
         payload = _decode_session(token)
         self.assertEqual(payload["uid"], 4)
         self.assertEqual(payload["ver"], 3)

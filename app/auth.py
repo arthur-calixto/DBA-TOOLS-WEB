@@ -2,24 +2,27 @@
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import hmac
 import json
 import logging
 import secrets
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import Depends, HTTPException, Request, Response
 from starlette.datastructures import MutableHeaders
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
+from app.audit import record
+from app.permissions import allowed, scoped
 
 from app.config import settings
 from app.persistence.database import DatabaseNotConfigured, session_scope
-from app.persistence.models import User
+from app.persistence.models import User, AuthSession
 
 logger = logging.getLogger(__name__)
 password_hasher = PasswordHasher()
@@ -41,6 +44,8 @@ class AuthenticatedUser:
     username: str
     is_admin: bool
     permissions: dict
+    role: str = ""
+    access_scopes: dict = field(default_factory=dict)
 
 
 def hash_password(password: str) -> str:
@@ -66,8 +71,25 @@ def _fernet() -> Fernet:
         raise AuthenticationUnavailable("AUTH_SESSION_KEY inválida") from exc
 
 
-def issue_session(user: User) -> str:
-    return _issue_session(user.id, user.auth_version)
+def issue_session(user: User, db_session=None) -> str:
+    token = _issue_session(user.id, user.auth_version)
+    payload = _decode_session(token)
+    stored = AuthSession(id_hash=_session_hash(payload), user_id=user.id,
+                         auth_version=user.auth_version, created_at=payload["iat"],
+                         expires_at=payload["exp"])
+    if db_session is not None:
+        db_session.add(stored)
+    else:
+        with session_scope() as session:
+            session.add(stored)
+    return token
+
+
+def _session_hash(payload):
+    value = payload.get("jti")
+    if not isinstance(value, str) or not value:
+        raise HTTPException(401, "Autenticação necessária.")
+    return hashlib.sha256(value.encode()).hexdigest()
 
 
 def _issue_session(user_id: int, auth_version: int) -> str:
@@ -108,15 +130,35 @@ def clear_session_cookie(response: Response) -> None:
     response.delete_cookie("dba_tools_csrf", path="/")
 
 
-def _load_user(payload: dict) -> User:
+def _load_user(payload: dict, request: Request) -> AuthenticatedUser:
     try:
         with session_scope() as session:
-            user = session.get(User, payload["uid"])
-            if user is None or not user.is_active or user.auth_version != payload.get("ver"):
+            # Locks serialize renewal with logout and global/admin revocation.
+            user = session.scalar(select(User).where(User.id == payload["uid"]).with_for_update())
+            stored = session.scalar(select(AuthSession).where(AuthSession.id_hash == _session_hash(payload)).with_for_update())
+            now = int(time.time())
+            if (user is None or not user.is_active or user.auth_version != payload.get("ver")
+                    or stored is None or stored.user_id != user.id or stored.revoked_at is not None
+                    or stored.auth_version != user.auth_version or stored.expires_at <= now):
                 raise HTTPException(401, "Autenticação necessária.")
-            return AuthenticatedUser(user.id, user.username, user.is_admin, user.permissions or {})
-    except DatabaseNotConfigured:
+            result = AuthenticatedUser(user.id, user.username, user.is_admin, user.permissions or {},
+                                       user.role, user.access_scopes or {})
+            if payload["exp"] - now < settings.auth_cookie_renew_threshold_seconds and request.url.path != "/auth/logout":
+                renewed = dict(payload, iat=now, exp=now + settings.auth_cookie_max_age_seconds)
+                stored.expires_at = renewed["exp"]
+                request.state.renew_token = _fernet().encrypt(json.dumps(renewed).encode()).decode()
+            return result
+    except (DatabaseNotConfigured, SQLAlchemyError):
         raise HTTPException(503, "Autenticação indisponível.") from None
+
+
+def audit_action(operation, outcome, user=None, target=None):
+    if settings.auth_enabled:
+        try:
+            with session_scope() as session:
+                record(session, operation, outcome, user.id if user else None, target)
+        except (DatabaseNotConfigured, SQLAlchemyError):
+            raise HTTPException(503, "Auditoria indisponível.") from None
 
 
 def current_user(request: Request) -> AuthenticatedUser | None:
@@ -127,12 +169,15 @@ def current_user(request: Request) -> AuthenticatedUser | None:
         if request.method == "GET" and "text/html" in request.headers.get("accept", ""):
             raise AuthenticationRequired(request.url.path)
         raise HTTPException(401, "Autenticação necessária.")
-    payload = _decode_session(token)
-    user = _load_user(payload)
-    remaining = payload["exp"] - int(time.time())
+    try:
+        payload = _decode_session(token)
+        user = _load_user(payload, request)
+    except HTTPException as exc:
+        if exc.status_code == 401:
+            audit_action("session.authenticate", "failure")
+        raise
     request.state.auth_token = token
     request.state.auth_user = user
-    request.state.renew_session = remaining < settings.auth_cookie_renew_threshold_seconds
     request.state.auth_version = payload["ver"]
     return user
 
@@ -143,21 +188,31 @@ def require_authenticated(user: AuthenticatedUser | None = Depends(current_user)
 
 def require_admin(user: AuthenticatedUser | None = Depends(current_user)) -> AuthenticatedUser:
     if not settings.auth_enabled or user is None or not user.is_admin:
+        audit_action("admin.access", "denied", user)
         raise HTTPException(403, "Permissão insuficiente.")
     return user
 
 
 def has_permission(user: AuthenticatedUser, permission: str) -> bool:
     """Permissões são opt-in; somente booleano True concede acesso."""
-    return bool(user.is_admin or user.permissions.get(permission) is True)
+    return allowed(user, permission)
 
 
 def require_permission(permission: str):
     def dependency(user: AuthenticatedUser | None = Depends(current_user)) -> AuthenticatedUser:
-        if not settings.auth_enabled or user is None or not has_permission(user, permission):
+        if not settings.auth_enabled:
+            return None
+        if user is None or not has_permission(user, permission):
+            audit_action(permission, "denied", user)
             raise HTTPException(403, "Permissão insuficiente.")
         return user
     return dependency
+
+
+def check_client_scope(user, client, environment=None):
+    if settings.auth_enabled and (user is None or not scoped(user, client, environment)):
+        audit_action("client.access", "denied", user, "sha256:" + hashlib.sha256(client.encode()).hexdigest())
+        raise HTTPException(403, "Permissão insuficiente.")
 
 
 def validate_csrf(request: Request) -> None:
@@ -166,6 +221,7 @@ def validate_csrf(request: Request) -> None:
     token = request.cookies.get(settings.auth_cookie_name)
     supplied = request.headers.get("x-csrf-token") or request.cookies.get("dba_tools_csrf")
     if not token or not supplied or not hmac.compare_digest(supplied, _csrf_value(token)):
+        audit_action("csrf.validate", "denied", getattr(request.state, "auth_user", None))
         raise HTTPException(403, "Proteção CSRF inválida.")
     origin = request.headers.get("origin")
     if origin:
@@ -173,6 +229,7 @@ def validate_csrf(request: Request) -> None:
         if not expected:
             expected = f"{request.url.scheme}://{request.headers.get('host', '')}".rstrip("/")
         if origin.rstrip("/") != expected:
+            audit_action("csrf.origin", "denied", getattr(request.state, "auth_user", None))
             raise HTTPException(403, "Origem não autorizada.")
 
 
@@ -191,13 +248,13 @@ class SessionRenewalMiddleware:
         async def send_with_renewal(message):
             if message["type"] == "http.response.start":
                 state = scope.get("state", {})
-                if state.get("renew_session"):
-                    token = _issue_session(state["auth_user"].id, state["auth_version"])
+                if state.get("renew_token") and message["status"] < 400:
                     response = Response()
-                    set_session_cookie(response, token)
+                    set_session_cookie(response, state["renew_token"])
                     headers = MutableHeaders(scope=message)
                     for key, value in response.raw_headers:
-                        headers.append(key.decode("latin-1"), value.decode("latin-1"))
+                        if key == b"set-cookie":
+                            headers.append(key.decode("latin-1"), value.decode("latin-1"))
             await send(message)
 
         await self.app(scope, receive, send_with_renewal)
