@@ -12,7 +12,9 @@ class Settings(BaseSettings):
     shared_dir: str = "/app/data"
     app_host: str = "0.0.0.0"
     app_port: int = 8000
-    public_base_url: str = "http://localhost:8000"
+    # Quando vazio, a proteção CSRF valida a origem contra o Host da própria
+    # requisição, permitindo homologação em endereços internos sem hardcode.
+    public_base_url: str = ""
 
     max_upload_bytes: int = Field(default=10 * 1024 * 1024, gt=0)
     max_request_bytes: int = Field(default=11 * 1024 * 1024, gt=0)

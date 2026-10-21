@@ -1,12 +1,25 @@
 import time
 import unittest
+from starlette.requests import Request
 from unittest.mock import patch
 
 from cryptography.fernet import Fernet
 from starlette.responses import Response
+from app.config import settings
 
 
 class AuthTests(unittest.TestCase):
+    def test_csrf_accepts_same_origin_from_request_host_when_base_url_unset(self):
+        from app.auth import _csrf_value, validate_csrf
+        token = "session-token"
+        headers = [(b"cookie", f"dba_tools_session={token}".encode()),
+                   (b"x-csrf-token", _csrf_value(token).encode()),
+                   (b"origin", b"http://10.40.0.17:8591"),
+                   (b"host", b"10.40.0.17:8591")]
+        scope = {"type": "http", "method": "POST", "scheme": "http", "path": "/monitor/analisar",
+                 "headers": headers, "query_string": b"", "server": ("10.40.0.17", 8591)}
+        with patch.object(settings, "auth_enabled", True), patch.object(settings, "public_base_url", ""):
+            validate_csrf(Request(scope))
     def setUp(self):
         from app.config import settings
 

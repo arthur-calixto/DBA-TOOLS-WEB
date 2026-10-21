@@ -168,8 +168,12 @@ def validate_csrf(request: Request) -> None:
     if not token or not supplied or not hmac.compare_digest(supplied, _csrf_value(token)):
         raise HTTPException(403, "Proteção CSRF inválida.")
     origin = request.headers.get("origin")
-    if origin and settings.public_base_url and not origin.rstrip("/") == settings.public_base_url.rstrip("/"):
-        raise HTTPException(403, "Origem não autorizada.")
+    if origin:
+        expected = settings.public_base_url.rstrip("/")
+        if not expected:
+            expected = f"{request.url.scheme}://{request.headers.get('host', '')}".rstrip("/")
+        if origin.rstrip("/") != expected:
+            raise HTTPException(403, "Origem não autorizada.")
 
 
 class SessionRenewalMiddleware:
