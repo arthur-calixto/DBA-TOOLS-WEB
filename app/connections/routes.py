@@ -97,7 +97,7 @@ def lock_references(session, model, values, parent_id=None):
 
 
 def values_for(payload):
-    values = payload.model_dump(exclude={'version', 'username', 'password', 'confirm_shared'})
+    values = payload.model_dump(exclude={'version', 'username', 'password', 'confirm_shared', 'environment_id', 'environment_name'})
     values['normalized_name'] = values['name'].casefold()
     if 'credential_id' in values:
         values['credential_id'] = str(values['credential_id'])
@@ -141,6 +141,28 @@ def register(model, path, create_schema, update_schema, parent_model=None, paren
             original = get(session, model, identifier)
             values = values_for(payload)
             lock_references(session, model, values, getattr(original, parent_field) if parent_field else None)
+            if model is Connection and (payload.environment_id is not None or payload.environment_name is not None):
+                original_env = get(session, Environment, original.environment_id)
+                if payload.environment_id is not None:
+                    target = get(session, Environment, payload.environment_id)
+                    if target.client_id != original_env.client_id:
+                        raise HTTPException(422, 'O ambiente não pertence ao cliente da conexão.')
+                    target = get(session, Environment, payload.environment_id, lock=True)
+                else:
+                    target = session.scalar(select(Environment).where(
+                        Environment.client_id == original_env.client_id,
+                        Environment.normalized_name == payload.environment_name.casefold()).with_for_update())
+                    if target is not None and not target.active:
+                        raise HTTPException(409, 'Ambiente arquivado; informe outro nome ou revise o cadastro avançado.')
+                    if target is None:
+                        target = Environment(id=str(uuid4()), client_id=original_env.client_id,
+                                             name=payload.environment_name,
+                                             normalized_name=payload.environment_name.casefold(),
+                                             created_by=user.id, updated_by=user.id)
+                        session.add(target)
+                        session.flush()
+                        record(session, 'environments.create', 'success', user.id, target.id)
+                values['environment_id'] = target.id
             row = get(session, model, identifier, lock=True)
             check_version(row, payload.version)
             if model is Credential and (payload.username is not None or payload.password is not None):

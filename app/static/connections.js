@@ -440,12 +440,34 @@
                 } else {
                     const context = element(
                         'p',
-                        state.client.name +
-                            ' / ' +
-                            (row.environment?.name || 'Ambiente atual')
+                        'Cliente: ' + state.client.name
                     );
                     context.className = 'field-help form-wide';
                     form.append(context);
+                    const environment = field(
+                        form,
+                        'environment_name',
+                        'Ambiente * — selecione ou digite',
+                        row.environment?.name ||
+                            state.environments.find(
+                                (e) => e.id === row.environment_id
+                            )?.name ||
+                            '',
+                        'text',
+                        true
+                    );
+                    environment.setAttribute(
+                        'list',
+                        'connection-environment-options'
+                    );
+                    const options = element('datalist');
+                    options.id = 'connection-environment-options';
+                    options.append(
+                        ...state.environments.map(
+                            (e) => new Option(e.name, e.name)
+                        )
+                    );
+                    form.append(options);
                 }
                 field(form, 'name', 'Identificação *', row?.name, 'text', true);
                 const type = select(
@@ -640,6 +662,7 @@
                     await api('/connections/' + row.id, 'PATCH', {
                         ...payload,
                         credential_id: text(data, 'credential_id'),
+                        environment_name: text(data, 'environment_name'),
                         version: row.version
                     });
                 } else {

@@ -128,12 +128,30 @@ const assert = require('node:assert/strict');
             })
         });
         await row.getByRole('button', { name: 'Detalhes / editar' }).click();
+        assert.equal(
+            await page.locator('[name=environment_name]').inputValue(),
+            'PROD'
+        );
+        await page.locator('[name=environment_name]').fill('TREINA');
         await page.locator('[name=host]').fill('edited.synthetic');
         await page.locator('#save-catalog').click();
         await page.locator('#editor').waitFor({ state: 'hidden' });
         await page
             .getByRole('cell', { name: 'edited.synthetic', exact: true })
             .waitFor();
+        await row.getByRole('cell', { name: 'TREINA', exact: true }).waitFor();
+        await page.reload();
+        await page.getByRole('button', { name, exact: true }).click();
+        await row.getByRole('cell', { name: 'TREINA', exact: true }).waitFor();
+        await row.getByRole('button', { name: 'Detalhes / editar' }).click();
+        await page.locator('[name=environment_name]').fill('PROD');
+        await page.locator('#save-catalog').click();
+        await page.locator('#editor').waitFor({ state: 'hidden' });
+        await row.getByRole('cell', { name: 'PROD', exact: true }).waitFor();
+        assert.equal(
+            await page.locator('#environment-filter option').count(),
+            3
+        );
         page.once('dialog', (dialog) => dialog.accept());
         await row.getByRole('button', { name: 'Arquivar' }).click();
         await row.waitFor({ state: 'detached' });

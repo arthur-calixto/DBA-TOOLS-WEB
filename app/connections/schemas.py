@@ -111,6 +111,19 @@ class EnvironmentUpdate(EnvironmentInput):
 
 class ConnectionUpdate(ConnectionInput):
     version: int = Field(gt=0)
+    environment_id: UUID | None = None
+    environment_name: str | None = Field(default=None, min_length=1, max_length=160)
+
+    @field_validator('environment_name')
+    @classmethod
+    def environment_label(cls, value):
+        return Payload.clean_name(value) if value is not None else None
+
+    @model_validator(mode='after')
+    def environment_selection(self):
+        if self.environment_id is not None and self.environment_name is not None:
+            raise ValueError('Selecione ou informe um ambiente, nunca ambos')
+        return self
 
 
 class CredentialUpdate(Payload):

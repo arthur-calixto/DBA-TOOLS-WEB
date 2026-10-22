@@ -250,3 +250,21 @@ Homologar manualmente no SHA entregue: reproduzir cadastro de cliente e ambiente
 novos no mesmo formulário, reutilizar ambos na segunda conexão, confirmar filtros
 Todos, editar, arquivar e recarregar. Comparar com o cadastro anteriormente
 relatado antes de concluir TER-12; testes sintéticos não confirmam dados reais de HML.
+
+
+### Alterar o ambiente de uma conexão
+
+Em **Detalhes / editar**, o cliente permanece fixo e **Ambiente** permite escolher
+uma sugestão existente ou digitar um novo nome. O PATCH aceita `environment_id`
+ou `environment_name`, nunca ambos; omitir ambos mantém o comportamento anterior.
+O servidor valida ambiente ativo e pertencente ao cliente original. Nomes são
+normalizados e reutilizados dentro desse cliente; ambientes arquivados não são
+reativados. Criação do ambiente, atualização e auditoria são uma única transação,
+com controle de versão e rollback integral. O ID da conexão e sua credencial são
+preservados. O ambiente anterior permanece cadastrado mesmo quando vazio.
+Não há migration. A listagem é atualizada com filtros Todos após salvar.
+
+Os testes de API cobrem troca por ID, criação/reutilização por nome, persistência,
+ambiente estrangeiro/arquivado, seleção inválida, edição obsoleta e rollback de
+auditoria. O teste Chromium também cria ambiente na edição, recarrega e retorna
+ao ambiente original, confirmando a preservação dos dois cadastros.

@@ -366,3 +366,72 @@ class ConnectionsTests(unittest.TestCase):
         with database.session_scope() as session:
             self.assertFalse(session.get(Client, client['id']).active)
             self.assertEqual(list(session.scalars(select(Credential))), [])
+
+    def edit_payload(self, connection, **extra):
+        return {**{k:connection[k] for k in ('name','type','host','port','credential_id','parameters','notes','version')}, **extra}
+
+    def test_edit_environment_preserves_connection_credential_and_original_environment(self):
+        from app.persistence.models import Environment
+        result = self.create('/connections', self.complete())
+        c, client, original = (result[k] for k in ('connection','client','environment'))
+        target = self.create('/clients/'+client['id']+'/environments', {'name':'TREINA'})
+        response = self.api('/connections/'+c['id'], 'PATCH', self.edit_payload(c, environment_id=target['id']))
+        self.assertEqual(response.status, 200, response.text)
+        updated = response.json()
+        self.assertEqual(updated['id'], c['id'])
+        self.assertEqual(updated['credential_id'], c['credential_id'])
+        self.assertEqual(updated['environment_id'], target['id'])
+        database.close_database()
+        listed = self.api('/clients/'+client['id']+'/connections').json()
+        self.assertEqual(listed['total'], 1)
+        self.assertEqual(listed['items'][0]['environment']['name'], 'TREINA')
+        with database.session_scope() as session:
+            self.assertTrue(session.get(Environment, original['id']).active)
+            self.assertEqual(len(list(session.scalars(select(Connection)))), 1)
+
+    def test_edit_creates_and_reuses_environment_without_duplicates(self):
+        result = self.create('/connections', self.complete())
+        c = result['connection']
+        first = self.api('/connections/'+c['id'], 'PATCH', self.edit_payload(c, environment_name='  NOVO livre  '))
+        self.assertEqual(first.status, 200, first.text)
+        second = self.api('/connections/'+c['id'], 'PATCH', self.edit_payload(first.json(), environment_name='novo livre'))
+        self.assertEqual(second.status, 200, second.text)
+        self.assertEqual(first.json()['environment_id'], second.json()['environment_id'])
+        database.close_database()
+        envs = self.api('/clients/'+result['client']['id']+'/environments').json()['items']
+        self.assertEqual(len(envs), 2)
+        self.assertEqual(self.api('/connections/'+c['id']).json()['environment_id'], first.json()['environment_id'])
+
+    def test_edit_environment_rejects_foreign_archived_invalid_and_stale(self):
+        result = self.create('/connections', self.complete())
+        c = result['connection']
+        other = self.create('/connections', self.complete(client_name='Outro', name='Outro'))
+        path = '/connections/'+c['id']
+        foreign = self.api(path, 'PATCH', self.edit_payload(c, environment_id=other['environment']['id']))
+        self.assertEqual(foreign.status, 422, foreign.text)
+        env = self.create('/clients/'+result['client']['id']+'/environments', {'name':'Arquivado'})
+        self.assertEqual(self.api('/environments/'+env['id']+'?version=1','DELETE').status,200)
+        for selection, status in [({'environment_id':env['id']},404), ({'environment_name':'Arquivado'},409),
+                                  ({'environment_name':'  '},422),
+                                  ({'environment_id':result['environment']['id'],'environment_name':'Ambos'},422),
+                                  ({'environment_name':'Não criar','version':999},409)]:
+            response = self.api(path,'PATCH',self.edit_payload(c,**selection))
+            self.assertEqual(response.status,status,response.text)
+        self.assertEqual(self.api(path).json()['environment_id'], c['environment_id'])
+        envs = self.api('/clients/'+result['client']['id']+'/environments').json()['items']
+        self.assertEqual(len(envs),1)  # novo ambiente da edição obsoleta sofreu rollback
+
+    def test_edit_environment_rolls_back_when_update_audit_fails(self):
+        from sqlalchemy.exc import SQLAlchemyError
+        from app.connections.routes import record
+        result = self.create('/connections', self.complete())
+        c = result['connection']
+        def audit(session, operation, *args):
+            if operation == 'connections.update':
+                raise SQLAlchemyError('synthetic failure')
+            return record(session, operation, *args)
+        with patch('app.connections.routes.record', side_effect=audit):
+            response = self.api('/connections/'+c['id'],'PATCH',self.edit_payload(c,environment_name='Rollback'))
+        self.assertEqual(response.status,503,response.text)
+        self.assertEqual(self.api('/connections/'+c['id']).json()['environment_id'],c['environment_id'])
+        self.assertEqual(len(self.api('/clients/'+result['client']['id']+'/environments').json()['items']),1)
