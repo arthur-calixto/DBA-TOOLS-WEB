@@ -7,15 +7,15 @@
     --brand-blue: #08469C;
     --brand-cyan: #16D1DB;
     --brand-coral: #FA8170;
-    --bg: #FAFCFC;
+    --bg: #F3F6F8;
     --bg-elevated: #EDF1F5;
     --surface: #FFFFFF;
     --surface-hover: #F0F8F8;
     --surface-alt: #F8FAFC;
     --border: #BCC9CF;
     --border-soft: #E5ECEF;
-    --text: #24333F;
-    --text-muted: #495C6B;
+    --text: #263746;
+    --text-muted: #526273;
     --text-faint: #586A77;
     --accent: var(--brand-blue);
     --accent-strong: #063775;
@@ -242,3 +242,27 @@ dialog::backdrop { background:#24333F66; }
 .catalog-page h2,#editor-fields p { overflow-wrap:anywhere; min-width:0; }
 .catalog-page .grid-clientes button { overflow-wrap:anywhere; white-space:normal; }
 .credential-row strong { overflow-wrap:anywhere; min-width:0; }
+
+/* TER-12 — formulário único, leitura confortável e gerenciamento secundário. */
+.catalog-page .meta { font-size: .9375rem; }
+.catalog-page .catalog-toolbar { gap: 10px; }
+.catalog-advanced { margin-left: auto; position: relative; }
+.catalog-advanced summary { cursor: pointer; color: var(--brand-blue); padding: 8px; font-weight: 700; font-size: .875rem; }
+.catalog-advanced[open] { flex-basis: 100%; margin-left: 0; }
+.catalog-advanced button { margin: 6px 8px 0 0; }
+.catalog-page td { font: 400 .9375rem/1.5 var(--font-body); }
+.catalog-page td:last-child button { display: block; margin-bottom: 6px; min-height: 34px; padding: 5px 12px; font-size: .8125rem; }
+#editor { width: min(800px, 94vw); }
+#editor-fields.connection-form-grid, .parameter-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 20px; }
+.form-wide { grid-column: 1 / -1; }
+.parameter-fields { border: 0; border-top: 1px solid var(--border-soft); padding: 14px 0 0; margin: 0; min-width: 0; }
+.parameter-fields legend { color: var(--text); font-weight: 700; padding: 0 8px 0 0; }
+.connection-form-grid .field-help { margin: 0; font-size: .875rem; }
+#catalog-form > .catalog-toolbar { position: sticky; bottom: -24px; background: var(--surface); padding: 12px 0; margin-bottom: 0; border-top: 1px solid var(--border-soft); }
+#catalog-status:not(:empty) { border-left: 3px solid var(--brand-teal); background: var(--surface); padding: 12px 16px; border-radius: 8px; }
+@media (max-width: 640px) {
+    #editor-fields.connection-form-grid, .parameter-fields { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+    .catalog-advanced { margin-left: 0; }
+    .catalog-filters { align-items: stretch; }
+    #catalog-form > .catalog-toolbar { bottom: -18px; }
+}

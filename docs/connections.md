@@ -13,8 +13,37 @@ Todos os usuários ativos autenticados, incluindo leitura/analista, compartilham
 o catálogo e as credenciais. Não foram criados novos perfis. Isso não altera as
 permissões para executar diagnósticos existentes.
 
-Fluxo: criar cliente → criar ambientes (cadastro auxiliar) → criar credencial
-compartilhada → cadastrar conexões. Para consultar, basta selecionar o cliente;
+Fluxo principal: **Nova conexão**, disponível mesmo sem cliente selecionado.
+No mesmo formulário, selecione o cliente atual ou cadastre um novo, selecione
+uma sugestão de ambiente ou digite um nome livre, preencha os dados técnicos e
+informe usuário/senha ou escolha uma credencial compartilhada existente. Nada
+precisa ser cadastrado previamente. Os campos específicos acompanham o tipo.
+Cliente e ambiente digitados são reutilizados pelo nome normalizado quando já
+existem; registros arquivados não são reativados. O servidor valida os vínculos.
+
+`POST /api/connections` salva cliente, ambiente, credencial Fernet e conexão em
+uma única transação, incluindo auditoria. Aceita `client_id` **ou** `client_name`,
+`environment_id` **ou** `environment_name`, `credential_id` **ou** `username` e
+`password`, além dos campos técnicos existentes. A resposta contém `client`,
+`environment` e `connection`, sem segredos. Conflitos de concorrência ou duplicidade respondem
+409 e fazem rollback integral; uma nova tentativa pode reutilizar o cadastro já
+confirmado por outro usuário. Nenhuma migration é necessária.
+
+Após salvar, o cliente da conexão é selecionado e os filtros voltam a Todos,
+com pesquisa vazia. Falhas no salvamento preservam os campos; se a gravação foi
+confirmada e apenas o refresh falhar, a mensagem distingue os dois resultados.
+**Gerenciamento avançado** mantém cadastro/edição de clientes; **Gerenciar cliente
+e ambientes** mantém seus cadastros auxiliares. Credenciais compartilhadas seguem
+acessíveis como ação secundária. A edição da conexão pode reutilizar outra
+credencial; alteração de um segredo compartilhado permanece no gerenciamento
+específico, com confirmação do impacto, sem sobrescrita implícita.
+
+A revisão identificou que o fluxo anterior conservava filtros depois da criação,
+podendo ocultar novos registros, e que criar apenas cliente/ambiente/credencial
+não criava uma conexão. Isso não comprova a causa do registro específico relatado
+em HML: banco, SHA implantado e resposta original não foram acessados.
+
+Para consultar, basta selecionar o cliente;
 não há escolha obrigatória de ambiente. Edição exige a versão atual; conflito
 409 pede recarregar. Campos não secretos da edição são enviados integralmente.
 Na credencial, usuário/senha omitidos preservam o valor anterior. Alterar segredo
@@ -193,3 +222,31 @@ Monitor com ZIP real, SQL integral e PDF. TER-12 permanece aberta até HML.
 Capturas exclusivamente sintéticas em `docs/visual/ter12-connections-1440.png`,
 `ter12-connections-390.png` e `ter12-connection-editor.png`. Testes reais de HML
 continuam pendentes e não são substituídos por essas evidências locais.
+
+## Regressão do formulário unificado
+
+A suíte padrão inclui cadastro completo, leitura após descarte do pool, edição,
+arquivamento, reutilização, filtros, autenticação/CSRF/HTTPS e rollback integral
+(inclusive falha no INSERT final). Os mesmos testes podem usar um PostgreSQL
+local descartável conforme o guard de `TER2_TEST_POSTGRES_URL` em
+`tests/test_access_sessions.py`; nunca apontar para HML/produção.
+
+O teste real de navegador usa apenas usuário e dados sintéticos, SQLite temporário
+e servidor no loopback. Execute da raiz com Python do projeto; dependências npm
+ficam fora do repositório:
+
+```bash
+npm install --prefix /tmp/ter12-browser playwright @axe-core/playwright
+node /tmp/ter12-browser/node_modules/playwright/cli.js install chromium
+NODE_PATH=/tmp/ter12-browser/node_modules python tests/browser/run_connections.py
+```
+
+Ele cobre login, formulário, filtros, erro preservando campos, falha de refresh
+após commit, edição, arquivamento, recarga, teclado, ausência de overflow global e
+axe em 1440/768/390px. A porta local 18765 deve estar livre. O teste padrão de API
+continua sem dependências npm. Nenhum dado ou log de cliente é utilizado.
+
+Homologar manualmente no SHA entregue: reproduzir cadastro de cliente e ambiente
+novos no mesmo formulário, reutilizar ambos na segunda conexão, confirmar filtros
+Todos, editar, arquivar e recarregar. Comparar com o cadastro anteriormente
+relatado antes de concluir TER-12; testes sintéticos não confirmam dados reais de HML.

@@ -119,3 +119,30 @@ class CredentialUpdate(Payload):
     password: SecretStr | None = Field(default=None, min_length=1, max_length=8192)
     version: int = Field(gt=0)
     confirm_shared: bool = False
+
+
+class ConnectionCreate(ConnectionInput):
+    """Cadastro completo, mantendo os contratos das APIs avançadas existentes."""
+    credential_id: UUID | None = None
+    client_id: UUID | None = None
+    client_name: str | None = Field(default=None, min_length=1, max_length=160)
+    environment_id: UUID | None = None
+    environment_name: str | None = Field(default=None, min_length=1, max_length=160)
+    username: SecretStr | None = Field(default=None, min_length=1, max_length=512)
+    password: SecretStr | None = Field(default=None, min_length=1, max_length=8192)
+
+    @field_validator('client_name', 'environment_name')
+    @classmethod
+    def selection_name(cls, value):
+        return Payload.clean_name(value) if value is not None else None
+
+    @model_validator(mode='after')
+    def selections(self):
+        if bool(self.client_id) == bool(self.client_name):
+            raise ValueError('Selecione ou informe um cliente')
+        if bool(self.environment_id) == bool(self.environment_name):
+            raise ValueError('Selecione ou informe um ambiente')
+        inline = self.username is not None or self.password is not None
+        if (self.credential_id and inline) or (not self.credential_id and not (self.username and self.password)):
+            raise ValueError('Selecione uma credencial ou informe usuário e senha')
+        return self

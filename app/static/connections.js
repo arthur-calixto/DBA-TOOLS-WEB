@@ -66,7 +66,9 @@
         } catch (_) {}
         if (!response.ok)
             throw new Error(
-                result.erro || 'Não foi possível concluir a operação.'
+                response.status === 422
+                    ? 'Revise os campos: cliente, ambiente, identificação, host/IP, porta e parâmetros do tipo selecionado (Oracle exige um serviço, SID ou alias).'
+                    : result.erro || 'Não foi possível concluir a operação.'
             );
         return result;
     }
@@ -135,6 +137,7 @@
             form = $('catalog-form'),
             fields = $('editor-fields');
         fields.replaceChildren();
+        fields.className = '';
         $('save-catalog').hidden = false;
         $('editor-title').textContent = title;
         $('editor-error').hidden = true;
@@ -144,10 +147,10 @@
             const submit = $('save-catalog');
             submit.disabled = true;
             try {
-                await save(new FormData(form));
+                const message = await save(new FormData(form));
                 dialog.close();
                 fields.replaceChildren();
-                status('Cadastro atualizado.');
+                status(message || 'Cadastro atualizado.');
             } catch (error) {
                 $('editor-error').textContent = error.message;
                 $('editor-error').hidden = false;
@@ -195,8 +198,7 @@
                         ...(row ? { version: row.version } : {})
                     }
                 );
-                await clients();
-                if (row) await openClient(result);
+                await openClient(result);
             }
         );
     }
@@ -361,103 +363,190 @@
         $('save-catalog').hidden = true;
     }
     async function editConnection(row = null) {
-        state.credentials = await all('/credentials');
-        if (!state.environments.length)
-            throw new Error('Cadastre um ambiente antes da conexão.');
-        if (!state.credentials.length)
-            throw new Error(
-                'Cadastre uma credencial compartilhada antes da conexão.'
-            );
-        $('save-catalog').hidden = false;
+        const [clientOptions, credentialOptions] = await Promise.all([
+            all('/clients'),
+            all('/credentials')
+        ]);
+        state.credentials = credentialOptions;
         editor(
-            row ? 'Conexão — detalhes e edição' : 'Nova conexão',
+            row ? 'Editar conexão' : 'Nova conexão',
             (form) => {
-                field(form, 'name', 'Identificação', row?.name, 'text', true);
-                const env = select(
-                    form,
-                    'environment_id',
-                    'Ambiente',
-                    [
-                        ['', 'Selecione um ambiente'],
-                        ...state.environments.map((e) => [e.id, e.name])
-                    ],
-                    row?.environment_id || $('environment-filter').value || ''
+                form.className = 'connection-form-grid';
+                const help = element(
+                    'p',
+                    'Cliente, ambiente e credencial são salvos junto com a conexão. Campos com * são obrigatórios.'
                 );
-                env.disabled = !!row;
+                help.className = 'field-help form-wide';
+                form.append(help);
+                if (!row) {
+                    const client = select(
+                        form,
+                        'client_id',
+                        'Cliente *',
+                        [
+                            ['', 'Cadastrar novo cliente…'],
+                            ...clientOptions.map((c) => [c.id, c.name])
+                        ],
+                        state.client?.id || ''
+                    );
+                    client.required = false;
+                    const clientName = field(
+                        form,
+                        'client_name',
+                        'Nome do novo cliente *',
+                        '',
+                        'text'
+                    );
+                    const env = field(
+                        form,
+                        'environment_name',
+                        'Ambiente * — selecione ou digite',
+                        '',
+                        'text',
+                        true
+                    );
+                    env.setAttribute('list', 'connection-environment-options');
+                    const options = element('datalist');
+                    options.id = 'connection-environment-options';
+                    form.append(options);
+                    let generation = 0;
+                    async function updateClient() {
+                        const ownGeneration = ++generation;
+                        clientName.parentElement.hidden = !!client.value;
+                        clientName.required = !client.value;
+                        clientName.disabled = !!client.value;
+                        env.value = '';
+                        options.replaceChildren();
+                        if (!client.value) return;
+                        try {
+                            const result = await api(
+                                '/clients/' + client.value + '/environments'
+                            );
+                            if (generation === ownGeneration)
+                                options.replaceChildren(
+                                    ...result.items.map(
+                                        (e) => new Option(e.name, e.name)
+                                    )
+                                );
+                        } catch (_) {
+                            // Digitar um nome existente também reutiliza o ambiente no servidor.
+                            if (generation === ownGeneration)
+                                help.textContent =
+                                    'Não foi possível carregar sugestões de ambientes. Digite o nome; ambientes existentes serão reutilizados.';
+                        }
+                    }
+                    client.addEventListener('change', updateClient);
+                    updateClient();
+                } else {
+                    const context = element(
+                        'p',
+                        state.client.name +
+                            ' / ' +
+                            (row.environment?.name || 'Ambiente atual')
+                    );
+                    context.className = 'field-help form-wide';
+                    form.append(context);
+                }
+                field(form, 'name', 'Identificação *', row?.name, 'text', true);
                 const type = select(
                     form,
                     'type',
-                    'Tipo',
+                    'Tipo *',
                     Object.entries(types),
                     row?.type || 'oracle'
                 );
-                field(form, 'host', 'Host/IP', row?.host, 'text', true);
+                field(form, 'host', 'Host/IP *', row?.host, 'text', true);
                 const port = field(
                     form,
                     'port',
-                    'Porta',
+                    'Porta *',
                     row?.port || 1521,
                     'number',
                     true
                 );
                 port.min = 1;
                 port.max = 65535;
-                select(
-                    form,
-                    'credential_id',
-                    'Credencial compartilhada',
-                    state.credentials.map((c) => [c.id, c.name]),
-                    row?.credential_id || state.credentials[0].id
-                );
-                const parameters = element('div');
+                const parameters = element('fieldset');
+                parameters.className = 'form-wide parameter-fields';
                 form.append(parameters);
+                const labels = {
+                    service_name: 'Serviço Oracle',
+                    sid: 'SID',
+                    tns_alias: 'Alias TNS',
+                    database: 'Banco de dados',
+                    instance: 'Instância',
+                    encrypt: 'Criptografar conexão',
+                    trust_server_certificate:
+                        'Confiar no certificado do servidor',
+                    sslmode: 'Modo TLS',
+                    host_key_fingerprint:
+                        'Impressão digital da chave do servidor',
+                    initial_directory: 'Diretório inicial',
+                    domain: 'Domínio'
+                };
+                const fields = {
+                    oracle: ['service_name', 'sid', 'tns_alias'],
+                    sqlserver: [
+                        'database',
+                        'instance',
+                        'encrypt',
+                        'trust_server_certificate'
+                    ],
+                    postgresql: ['database', 'sslmode'],
+                    ssh: ['host_key_fingerprint'],
+                    rdp: ['domain'],
+                    sftp: ['host_key_fingerprint', 'initial_directory'],
+                    scp: ['host_key_fingerprint', 'initial_directory']
+                };
                 function parametersForType() {
-                    parameters.replaceChildren();
-                    const fields = {
-                        oracle: ['service_name', 'sid', 'tns_alias'],
-                        sqlserver: [
-                            'database',
-                            'instance',
-                            'encrypt',
-                            'trust_server_certificate'
-                        ],
-                        postgresql: ['database', 'sslmode'],
-                        ssh: ['host_key_fingerprint'],
-                        rdp: ['domain'],
-                        sftp: ['host_key_fingerprint', 'initial_directory'],
-                        scp: ['host_key_fingerprint', 'initial_directory']
-                    }[type.value];
-                    parameters.append(
-                        element(
-                            'p',
-                            'Parâmetros específicos — Oracle: preencha somente serviço, SID ou alias TNS.'
-                        )
+                    parameters.replaceChildren(
+                        element('legend', 'Parâmetros de ' + types[type.value])
                     );
-                    for (const key of fields) {
+                    if (type.value === 'oracle') {
+                        const hint = element(
+                            'p',
+                            'Informe somente um: serviço, SID ou alias TNS.'
+                        );
+                        hint.className = 'field-help form-wide';
+                        parameters.append(hint);
+                    }
+                    for (const key of fields[type.value]) {
+                        const value =
+                            row?.type === type.value ? row.parameters[key] : '';
                         if (
                             ['encrypt', 'trust_server_certificate'].includes(
                                 key
                             )
                         ) {
-                            const i = field(
+                            const checkbox = field(
                                 parameters,
                                 'param_' + key,
-                                key,
+                                labels[key],
                                 '',
                                 'checkbox'
                             );
-                            i.checked =
-                                row?.type === type.value
-                                    ? !!row.parameters[key]
-                                    : false;
+                            checkbox.checked = !!value;
+                        } else if (key === 'sslmode') {
+                            select(
+                                parameters,
+                                'param_' + key,
+                                labels[key],
+                                [
+                                    'require',
+                                    'verify-ca',
+                                    'verify-full',
+                                    'prefer',
+                                    'allow',
+                                    'disable'
+                                ].map((v) => [v, v]),
+                                value || 'require'
+                            );
                         } else
                             field(
                                 parameters,
                                 'param_' + key,
-                                key,
-                                row?.type === type.value
-                                    ? row.parameters[key]
-                                    : ''
+                                labels[key],
+                                value
                             );
                     }
                 }
@@ -474,25 +563,67 @@
                     }[type.value];
                 });
                 parametersForType();
-                field(
+                const credential = select(
+                    form,
+                    'credential_id',
+                    row ? 'Credencial compartilhada *' : 'Acesso *',
+                    [
+                        ...(!row ? [['', 'Informar usuário e senha']] : []),
+                        ...credentialOptions.map((c) => [c.id, c.name])
+                    ],
+                    row?.credential_id || ''
+                );
+                credential.required = !!row;
+                if (!row) {
+                    const username = field(
+                        form,
+                        'username',
+                        'Usuário *',
+                        '',
+                        'text',
+                        true
+                    );
+                    const password = field(
+                        form,
+                        'password',
+                        'Senha *',
+                        '',
+                        'password',
+                        true
+                    );
+                    const hint = element(
+                        'p',
+                        'As credenciais são criptografadas e compartilhadas com a equipe autenticada. Nunca informe senhas nas observações.'
+                    );
+                    hint.className = 'field-help form-wide';
+                    form.append(hint);
+                    credential.addEventListener('change', () => {
+                        for (const input of [username, password]) {
+                            input.disabled = !!credential.value;
+                            input.required = !credential.value;
+                            input.parentElement.hidden = !!credential.value;
+                        }
+                    });
+                }
+                const notes = field(
                     form,
                     'notes',
-                    'Observações (não inclua senhas)',
+                    'Observações (opcional)',
                     row?.notes,
                     'textarea'
                 );
+                notes.parentElement.classList.add('form-wide');
             },
             async (data) => {
                 const parameters = {};
-                for (const [k, v] of data.entries()) {
-                    if (k.startsWith('param_') && v)
-                        parameters[k.slice(6)] = [
+                for (const [key, value] of data.entries())
+                    if (key.startsWith('param_') && value)
+                        parameters[key.slice(6)] = [
                             'param_encrypt',
                             'param_trust_server_certificate'
-                        ].includes(k)
+                        ].includes(key)
                             ? true
-                            : String(v);
-                }
+                            : String(value);
                 if (text(data, 'type') === 'sqlserver')
                     for (const key of ['encrypt', 'trust_server_certificate'])
                         parameters[key] = data.has('param_' + key);
@@ -501,21 +632,39 @@
                     type: text(data, 'type'),
                     host: text(data, 'host'),
                     port: Number(data.get('port')),
-                    credential_id: text(data, 'credential_id'),
                     parameters,
-                    notes: text(data, 'notes'),
-                    ...(row ? { version: row.version } : {})
+                    notes: text(data, 'notes')
                 };
-                await api(
-                    row
-                        ? '/connections/' + row.id
-                        : '/environments/' +
-                              text(data, 'environment_id') +
-                              '/connections',
-                    row ? 'PATCH' : 'POST',
-                    payload
-                );
-                await rows();
+                let client = state.client;
+                if (row) {
+                    await api('/connections/' + row.id, 'PATCH', {
+                        ...payload,
+                        credential_id: text(data, 'credential_id'),
+                        version: row.version
+                    });
+                } else {
+                    const result = await api('/connections', 'POST', {
+                        ...payload,
+                        ...(text(data, 'client_id')
+                            ? { client_id: text(data, 'client_id') }
+                            : { client_name: text(data, 'client_name') }),
+                        environment_name: text(data, 'environment_name'),
+                        ...(text(data, 'credential_id')
+                            ? { credential_id: text(data, 'credential_id') }
+                            : {
+                                  username: text(data, 'username'),
+                                  password: text(data, 'password')
+                              })
+                    });
+                    client = result.client;
+                }
+                // O POST já confirmou o commit. Falha de atualização não deve sugerir novo envio.
+                try {
+                    await openClient(client); // limpa todos os filtros e mostra a conexão salva
+                } catch (_) {
+                    return 'Conexão salva. Não foi possível atualizar a listagem; selecione o cliente novamente ou recarregue a página.';
+                }
+                return 'Conexão salva e listagem atualizada.';
             }
         );
     }
@@ -647,7 +796,7 @@
         safe(() => archive('/clients', state.client, clients));
     $('new-environment').onclick = () => editEnvironment();
     $('manage-environments').onclick = manageEnvironments;
-    $('new-connection').onclick = () => safe(() => editConnection());
+    $('new-connection-global').onclick = () => safe(() => editConnection());
     $('new-credential').onclick = () => editCredential();
     $('more-connections').onclick = () => safe(() => rows(true));
     let timer;

@@ -257,3 +257,112 @@ class ConnectionsTests(unittest.TestCase):
             self.assertIn('Restaure', response.text)
             self.assertNotIn(original.strip().decode(), response.text)
             self.assertFalse(path.exists())
+
+    def complete(self, **overrides):
+        return {'client_name':'Cliente integrado', 'environment_name':'PROD livre',
+                'name':'Servidor principal', 'type':'ssh', 'host':'synthetic.internal', 'port':22,
+                'username':'synthetic-user', 'password':'synthetic-password', **overrides}
+
+    def test_complete_creation_listing_reload_edit_archive_and_environment_reuse(self):
+        result = self.create('/connections', self.complete())
+        client, env, connection = (result[k] for k in ('client','environment','connection'))
+        self.assertNotIn('password', json.dumps(result))
+        path = '/clients/'+client['id']+'/connections'
+        self.assertEqual(self.api(path).json()['items'][0]['id'], connection['id'])
+        second = self.create('/connections', self.complete(name='Segundo servidor',
+            environment_name='prod livre'))
+        self.assertEqual(second['client']['id'], client['id'])
+        self.assertEqual(second['environment']['id'], env['id'])
+        database.close_database()  # nova conexão ao banco, como após reinício
+        self.assertEqual(self.api(path).json()['total'], 2)
+        payload = {k:connection[k] for k in ('name','type','host','port','credential_id','parameters','notes','version')}
+        payload['host'] = 'edited.internal'
+        updated = self.api('/connections/'+connection['id'], 'PATCH', payload)
+        self.assertEqual(updated.status, 200, updated.text)
+        self.assertEqual(updated.json()['host'], 'edited.internal')
+        archived = self.api('/connections/'+connection['id']+'?version='+str(updated.json()['version']), 'DELETE')
+        self.assertEqual(archived.status, 200, archived.text)
+        database.close_database()
+        self.assertEqual(self.api(path).json()['total'], 1)
+        secret = self.api('/credentials/'+connection['credential_id']+'/reveal', 'POST')
+        self.assertEqual(secret.json()['password'], 'synthetic-password')
+
+    def test_complete_reuses_shared_credential_without_overwriting_it(self):
+        first = self.create('/connections', self.complete())
+        payload = self.complete(name='Outro', client_id=first['client']['id'],
+            environment_id=first['environment']['id'], credential_id=first['connection']['credential_id'])
+        for field in ('client_name','environment_name','username','password'):
+            payload.pop(field)
+        result = self.create('/connections', payload)
+        self.assertEqual(result['connection']['credential_id'], first['connection']['credential_id'])
+        with database.session_scope() as session:
+            self.assertEqual(len(list(session.scalars(select(Credential)))), 1)
+        self.assertEqual(self.api('/clients/'+first['client']['id']+'/connections?type=ssh&q=Outro').json()['total'], 1)
+
+    def test_complete_rolls_back_inline_credential_on_duplicate_connection(self):
+        result = self.create('/connections', self.complete())
+        response = self.api('/connections', 'POST', self.complete(password='another-synthetic-secret'))
+        self.assertEqual(response.status, 409, response.text)
+        with database.session_scope() as session:
+            self.assertEqual(len(list(session.scalars(select(Credential)))), 1)
+            self.assertEqual(len(list(session.scalars(select(Connection)))), 1)
+        self.assertNotIn('another-synthetic-secret', response.text)
+        self.assertEqual(self.api('/clients/'+result['client']['id']+'/connections').json()['total'], 1)
+
+    def test_complete_rolls_back_client_environment_credential_when_final_insert_fails(self):
+        from sqlalchemy.exc import SQLAlchemyError
+        from sqlalchemy import event
+        def fail(mapper, connection, target):
+            raise SQLAlchemyError('synthetic internal failure')
+        event.listen(Connection, 'before_insert', fail)
+        try:
+            response = self.api('/connections', 'POST', self.complete())
+        finally:
+            event.remove(Connection, 'before_insert', fail)
+        self.assertEqual(response.status, 503, response.text)
+        from app.persistence.models import Environment
+        with database.session_scope() as session:
+            for model in (Client, Environment, Credential, Connection):
+                self.assertEqual(list(session.scalars(select(model))), [])
+        self.assertNotIn('synthetic internal', response.text)
+
+    def test_complete_rejects_cross_client_environment_and_invalid_selections(self):
+        result = self.create('/connections', self.complete())
+        payload = self.complete(client_name='Outro cliente', environment_id=result['environment']['id'])
+        payload.pop('environment_name')
+        response = self.api('/connections', 'POST', payload)
+        self.assertEqual(response.status, 422, response.text)
+        self.assertEqual(self.api('/clients').json()['total'], 1)
+        for change in ({'username':None}, {'credential_id':result['connection']['credential_id']},
+                       {'client_name':'   '}, {'environment_name':'\n'}, {'port':0},
+                       {'type':'oracle','parameters':{}}, {'parameters':{'command':'bad'}}):
+            with self.subTest(change=change):
+                response = self.api('/connections', 'POST', self.complete(**change))
+                self.assertEqual(response.status, 422, response.text)
+
+    def test_complete_preserves_auth_csrf_https_and_supported_types(self):
+        self.assertEqual(self.api('/connections', 'POST', self.complete(), headers={}).status, 401)
+        headers = self.headers(self.token)
+        headers.pop(b'x-csrf-token', None)
+        self.assertEqual(self.api('/connections', 'POST', self.complete(), headers=headers).status, 403)
+        with patch.object(settings, 'credentials_allow_http', False):
+            self.assertEqual(self.api('/connections', 'POST', self.complete()).status, 403)
+        for kind in ('oracle','sqlserver','postgresql','ssh','rdp','sftp','scp'):
+            with self.subTest(kind=kind):
+                self.create('/connections', self.complete(name=kind, type=kind,
+                    parameters={'service_name':'SYNTHETIC'} if kind=='oracle' else {}))
+
+    def test_complete_does_not_reactivate_archived_entities_or_keep_rows_on_vault_failure(self):
+        from app.errors import PublicHTTPException
+        with patch('app.connections.routes.seal', side_effect=PublicHTTPException(503, 'Cofre indisponível.')):
+            failed = self.api('/connections', 'POST', self.complete())
+        self.assertEqual(failed.status, 503, failed.text)
+        self.assertEqual(self.api('/clients').json()['total'], 0)
+        client = self.create('/clients', {'name':'Cliente integrado'})
+        archived = self.api('/clients/'+client['id']+'?version=1', 'DELETE')
+        self.assertEqual(archived.status, 200, archived.text)
+        failed = self.api('/connections', 'POST', self.complete())
+        self.assertEqual(failed.status, 409, failed.text)
+        with database.session_scope() as session:
+            self.assertFalse(session.get(Client, client['id']).active)
+            self.assertEqual(list(session.scalars(select(Credential))), [])

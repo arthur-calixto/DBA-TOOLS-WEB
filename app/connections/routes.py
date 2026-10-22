@@ -250,3 +250,56 @@ def reveal(identifier: UUID, user=Depends(member)):
         # O commit da auditoria precede o envio da resposta.
         response = JSONResponse(secret, headers={'Cache-Control': 'no-store', 'Pragma': 'no-cache'})
     return response
+
+
+@router.post('/connections', status_code=201)
+def create_complete_connection(payload: S.ConnectionCreate, user=Depends(member)):
+    """Uma transação para todo o formulário; nenhum segredo é retornado."""
+    with transaction() as session:
+        def add(model, **values):
+            row = model(id=str(uuid4()), created_by=user.id, updated_by=user.id,
+                        normalized_name=values['name'].casefold(), **values)
+            session.add(row)
+            session.flush()
+            record(session, model.__tablename__ + '.create', 'success', user.id, row.id)
+            return row
+
+        if payload.client_id:
+            client = get(session, Client, payload.client_id, lock=True)
+        else:
+            # Um nome já cadastrado não cria outro cliente. Arquivados não são reativados.
+            client = session.scalar(select(Client).where(
+                Client.normalized_name == payload.client_name.casefold()).with_for_update())
+            if client is not None and not client.active:
+                raise HTTPException(409, 'Cliente arquivado; selecione outro nome ou revise o cadastro avançado.')
+            if client is None:
+                client = add(Client, name=payload.client_name)
+
+        if payload.environment_id:
+            environment = get(session, Environment, payload.environment_id, lock=True)
+            if environment.client_id != client.id:
+                raise HTTPException(422, 'O ambiente não pertence ao cliente selecionado.')
+        else:
+            environment = session.scalar(select(Environment).where(
+                Environment.client_id == client.id,
+                Environment.normalized_name == payload.environment_name.casefold()).with_for_update())
+            if environment is not None and not environment.active:
+                raise HTTPException(409, 'Ambiente arquivado; informe outro nome ou revise o cadastro avançado.')
+            if environment is None:
+                environment = add(Environment, name=payload.environment_name, client_id=client.id)
+
+        if payload.credential_id:
+            credential = get(session, Credential, payload.credential_id, lock=True)
+        else:
+            identifier = str(uuid4())
+            ciphertext, key_id = seal(identifier, payload.username.get_secret_value(), payload.password.get_secret_value())
+            # Nome interno único; pode ser renomeado no gerenciamento avançado.
+            credential = Credential(id=identifier, name=f'{payload.name[:110]} · {identifier}',
+                                    normalized_name=f'inline-{identifier}', ciphertext=ciphertext, key_id=key_id,
+                                    created_by=user.id, updated_by=user.id)
+            session.add(credential)
+            session.flush()
+            record(session, 'credentials.create', 'success', user.id, credential.id)
+        values = payload.model_dump(include={'name', 'type', 'host', 'port', 'parameters', 'notes'})
+        connection = add(Connection, environment_id=environment.id, credential_id=credential.id, **values)
+        return {'client': public(client), 'environment': public(environment), 'connection': public(connection)}
