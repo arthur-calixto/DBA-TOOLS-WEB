@@ -2,7 +2,9 @@
 
 Requer Playwright e axe-core em NODE_PATH (ver docs/connections.md).
 """
+import argparse
 import logging
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -20,6 +22,9 @@ from app.main import app  # noqa: E402
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--visual', action='store_true', help='Validação TER-11 das telas principais')
+    args = parser.parse_args()
     logging.disable(logging.WARNING)
     ConnectionsTests.setUpClass()
     fixture = ConnectionsTests('test_complete_creation_listing_reload_edit_archive_and_environment_reuse')
@@ -34,7 +39,12 @@ def main():
             if not thread.is_alive() or time.monotonic() > deadline:
                 raise RuntimeError('Servidor de teste local não iniciou')
             time.sleep(.05)
-        subprocess.run(['node', str(ROOT / 'tests/browser/connections.cjs')], cwd=ROOT, check=True)
+        from synthetic import archive
+        zip_path = Path(fixture.directory.name) / 'monitor-synthetic.zip'
+        zip_path.write_bytes(archive())
+        script = 'visual.cjs' if args.visual else 'connections.cjs'
+        subprocess.run(['node', str(ROOT / 'tests/browser' / script)], cwd=ROOT, check=True,
+                       env={**os.environ, 'TER11_MONITOR_ZIP': str(zip_path)})
     finally:
         server.should_exit = True
         thread.join(timeout=10)

@@ -33,11 +33,11 @@
         let ultimoResultado = null;
         const pillGroups = new Map();
 
-        function renderTabela(linhas) {
+        function renderTabela(linhas, titulo = "Dados do diagnóstico") {
             if (!linhas || linhas.length === 0) return "<p>Nenhum resultado.</p>";
             const temStatus = "STATUS" in linhas[0];
             const colunas = Object.keys(linhas[0]).filter(c => c !== "STATUS");
-            let html = '<div class="table-scroll" role="region" aria-label="Dados do diagnóstico" tabindex="0"><table><thead><tr>';
+            let html = `<div class="table-scroll" role="region" aria-label="${escapeHTML(titulo)}" tabindex="0"><table><thead><tr>`;
             colunas.forEach(c => html += `<th>${escapeHTML(c)}</th>`);
             html += "</tr></thead><tbody>";
             linhas.forEach(row => {
@@ -193,7 +193,7 @@
                     } else if (check.exibicao === "contagem") {
                         corpo = renderContagem(data[check.id]);
                     } else {
-                        corpo = renderTabela(data[check.id]);
+                        corpo = renderTabela(data[check.id], check.titulo);
                     }
                     resultadoDiv.innerHTML += `<section><h2>${escapeHTML(check.titulo)}</h2>${corpo}</section>`;
                 });
