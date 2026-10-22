@@ -4,14 +4,23 @@ import json
 from cryptography.fernet import Fernet, MultiFernet, InvalidToken
 from app.errors import PublicHTTPException as HTTPException
 from app.config import settings
+from app.connections.key_file import VaultFileUnavailable, load_or_create_key
 
 
 def keyring():
     try:
-        keys = [key.strip() for key in (settings.credential_keys or '').split(',') if key.strip()]
+        if settings.credential_keys and settings.credential_keys.strip():
+            # Chave explícita não vazia tem prioridade; inválida não aciona fallback.
+            keys = [key.strip() for key in settings.credential_keys.split(',') if key.strip()]
+        elif settings.credential_key_file:
+            keys = [load_or_create_key(settings.credential_key_file)]
+        else:
+            keys = []
         if not keys or settings.auth_session_key in keys:
             raise ValueError()
         return MultiFernet([Fernet(key.encode('ascii')) for key in keys]), hashlib.sha256(keys[0].encode()).hexdigest()[:16]
+    except VaultFileUnavailable as exc:
+        raise HTTPException(503, str(exc)) from None
     except (ValueError, TypeError, UnicodeError):
         raise HTTPException(503, 'Cofre indisponível.') from None
 

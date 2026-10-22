@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     connections_enabled: bool = False
     catalog_max_request_bytes: int = Field(default=128 * 1024, gt=0)
     credential_keys: str | None = Field(default=None, repr=False)
+    credential_key_file: str | None = None
     credentials_allow_http: bool = False
 
     auth_enabled: bool = False

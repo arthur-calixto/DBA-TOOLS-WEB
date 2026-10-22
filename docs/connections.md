@@ -39,28 +39,25 @@ Configurar fora do Git, no arquivo privado já indicado por `HML_ENV_FILE`:
 | `CONNECTIONS_ENABLED=true` | Disponibiliza o novo cadastro e menu |
 | `AUTH_ENABLED=true` | Sessão persistente existente obrigatória |
 | `DATABASE_URL` | PostgreSQL interno de HML já configurado; nunca banco de cliente |
-| `CREDENTIAL_KEYS` | Uma ou mais chaves Fernet separadas por vírgula; primeira cifra, demais leem dados anteriores |
+| `CREDENTIAL_KEYS` | Opcional: mantém instalações explícitas existentes; em HML nova, deixar ausente para geração automática |
+| `CREDENTIAL_KEY_FILE` | Definida automaticamente pelo Compose HML: `/app/private/vault/fernet.key` |
 | `CREDENTIALS_ALLOW_HTTP=false` | Padrão exige HTTPS para gravação e revelação de segredos |
 | `CATALOG_MAX_REQUEST_BYTES=131072` | Limite só dos pequenos payloads JSON deste módulo |
 
-A chave deve ser diferente de `AUTH_SESSION_KEY`; não há senha/chave padrão.
-Gerar a chave em diretório protegido **fora do repositório**, sem imprimi-la no terminal/CI:
+**Em HML não é necessário gerar nem configurar uma chave manualmente.** O Compose
+monta o volume exclusivo `dba_tools_hml_vault`; o primeiro acesso autenticado ao
+módulo inicializa a chave, somente se ela e as credenciais cifradas ainda não
+existirem. Os deploys seguintes reutilizam esse mesmo volume e arquivo.
 
-```bash
-umask 077
-python3 - <<'PY'
-from cryptography.fernet import Fernet
-from pathlib import Path
-# Execute somente em estação/ambiente administrativo aprovado com cryptography.
-with Path('credential-key.private').open('xb') as destination:
-    destination.write(Fernet.generate_key() + b'\n')
-PY
-```
+`CREDENTIAL_KEYS` continua com prioridade para instalações já configuradas;
+um valor não vazio inválido não aciona geração alternativa. Para uma
+instalação nova automática, deixar essa variável ausente ou vazia. Não remover uma
+configuração existente com dados cifrados sem planejar a preservação da chave.
+A chave do cofre permanece distinta de `AUTH_SESSION_KEY`.
 
-Transferir/configurar pelo procedimento seguro da equipe. Nunca versionar esse
-arquivo nem inserir chave em comandos, URL, logs ou chamados. Conservar cópia
-segura independente dos backups do banco. Não reutilizar chaves/dados reais
-entre HML e produção.
+Procedimento de persistência, backup, recuperação e limitações em
+[cofre automático](vault.md). O banco e as configurações de autenticação não
+foram alterados; nenhuma chave fica no Git, na imagem ou em respostas/logs.
 
 HTTPS é recomendado para a ativação. O processo deve receber o scheme HTTPS de
 um proxy confiável; não confiar em headers enviados por clientes arbitrários.
@@ -156,12 +153,13 @@ quatro tabelas novas e as chaves guardadas separadamente. Banco restaurado sem
 chaves correspondentes não recupera credenciais. Testar restauração em ambiente
 descartável, nunca sobre o banco em uso.
 
-Rotação: configurar chave nova primeiro e manter as anteriores; uma alteração
+Rotação avançada em modo `CREDENTIAL_KEYS`: configurar chave nova primeiro e manter as anteriores; uma alteração
 de usuário/senha recifra aquela credencial com a primeira chave. Não remover
 chaves antigas antes de recifrar/verificar TODOS os registros e considerar
 backups antigos, inclusive registros arquivados. Rotação em lote ainda não
 possui comando: manter keyring antigo até procedimento administrativo próprio
-ser aprovado. Não reutilizar a rotação de sessão para o cofre.
+ser aprovado. Não reutilizar a rotação de sessão para o cofre. O arquivo automático não é
+rotacionado por deploy, reinício ou alteração de usuário/senha.
 
 Rollback: desabilitar o módulo/reverter imagem conforme compatibilidade do
 schema; manter as tabelas e chaves. Não executar downgrade automático. A versão

@@ -28,7 +28,7 @@ class ConnectionsTests(unittest.TestCase):
     def setUp(self):
         support.AccessSessionTests.setUp(self)
         config = patch.multiple(settings, connections_enabled=True,
-                                credential_keys=Fernet.generate_key().decode(), credentials_allow_http=True)
+                                credential_keys=Fernet.generate_key().decode(), credential_key_file=None, credentials_allow_http=True)
         config.start()
         self.addCleanup(config.stop)
         self.token = self.cookie('reader')  # Compartilhado sem novos papéis/RBAC.
@@ -236,3 +236,24 @@ class ConnectionsTests(unittest.TestCase):
             user.auth_version += 1
         self.assertEqual(self.api('/clients').status, 401)
         self.assertEqual(self.api('/credentials/'+credential['id']+'/reveal', 'POST').status, 401)
+
+    def test_automatic_vault_web_flow_and_loss_after_restart(self):
+        path = __import__('pathlib').Path(self.directory.name) / 'vault' / 'fernet.key'
+        with patch.multiple(settings, credential_keys=None, credential_key_file=str(path)):
+            page = request(app, '/connections', headers=self.headers(self.token))
+            self.assertEqual(page.status, 200, page.text)
+            original = path.read_bytes()
+            self.assertNotIn(original.strip().decode(), page.text)
+            credential = self.create('/credentials', {'name':'Automática', 'username':'synthetic-user', 'password':'synthetic-secret'})
+            database.close_database()
+            with patch('app.connections.key_file.Fernet.generate_key', side_effect=AssertionError('Never regenerate')):
+                revealed = self.api('/credentials/'+credential['id']+'/reveal', 'POST')
+                self.assertEqual(revealed.status, 200, revealed.text)
+                self.assertEqual(revealed.json()['password'], 'synthetic-secret')
+            self.assertEqual(path.read_bytes(), original)
+            path.unlink()
+            response = self.api('/credentials/'+credential['id']+'/reveal', 'POST')
+            self.assertEqual(response.status, 503)
+            self.assertIn('Restaure', response.text)
+            self.assertNotIn(original.strip().decode(), response.text)
+            self.assertFalse(path.exists())

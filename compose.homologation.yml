@@ -8,6 +8,7 @@ services:
       - ${HML_ENV_FILE:?Defina HML_ENV_FILE}
     environment:
       SHARED_DIR: /app/data
+      CREDENTIAL_KEY_FILE: /app/private/vault/fernet.key
     volumes:
       - type: bind
         source: ${HML_DATA_DIR:?Defina HML_DATA_DIR}
@@ -15,6 +16,11 @@ services:
         read_only: true
         bind:
           create_host_path: false
+      - type: volume
+        source: hml_vault
+        target: /app/private
+        volume:
+          nocopy: true
     restart: unless-stopped
     # Limites conservadores para não competir indevidamente com produção.
     # Ajuste estes valores somente após observar o consumo na VM.
@@ -33,3 +39,12 @@ networks:
   dba_tools_hml:
     name: dba_tools_hml
     external: true
+
+# Nome estável entre SHAs/projetos Compose; nunca compartilhar com produção.
+# Deploy usa up/run --rm e preserva este volume. Não executar down -v/prune.
+volumes:
+  hml_vault:
+    name: dba_tools_hml_vault
+    labels:
+      com.dba-tools.environment: homologation
+      com.dba-tools.purpose: vault

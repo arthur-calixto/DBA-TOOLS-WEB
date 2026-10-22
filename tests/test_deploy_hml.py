@@ -85,6 +85,9 @@ class DeployHmlTests(unittest.TestCase):
             self.assertNotIn('SYNTHETIC_SECRET', result.stdout + result.stderr + summary + calls)
             self.assertFalse(any(name.startswith('.release-env') or name.endswith('.partial') for name in files))
             self.assertNotIn(' downgrade', calls)
+            # Nem sucesso nem rollback podem remover o volume persistente do cofre.
+            for forbidden in (' down', ' prune', 'volume rm', '--renew-anon-volumes', '--volumes'):
+                self.assertNotIn(forbidden, calls)
             self.assertNotIn(' analise-ambiente ', calls)
             return result, calls, files, summary
 
