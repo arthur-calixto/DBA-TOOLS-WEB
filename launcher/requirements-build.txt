@@ -1,0 +1,2 @@
+# Somente empacotamento Windows; não adicionar ao requirements.txt do backend.
+pyinstaller==6.22.3
