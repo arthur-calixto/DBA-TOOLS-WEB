@@ -109,6 +109,13 @@ def main(argv=None):
     for kind in TOOLS:
         ttk.Button(tests, text='Testar '+TOOLS[kind][0], command=lambda k=kind: guarded(lambda: test(k))).pack(side='left', padx=(0,8))
 
+    def laboratory():
+        from launcher.lab_dialog import open_dialog
+        validate_executable('ssh', paths['ssh'].get())
+        open_dialog(root, paths['ssh'].get())
+
+    ttk.Button(tests, text='SSH com senha sintética…', command=lambda: guarded(laboratory)).pack(side='left')
+
     def registration(remove=False):
         command = protocol.current_command()
         action = 'Remover' if remove else 'Registrar'
@@ -121,7 +128,7 @@ def main(argv=None):
     ttk.Button(protocols, text='Registrar dbatools://', command=lambda: guarded(registration)).pack(side='left', padx=(0,8))
     ttk.Button(protocols, text='Remover registro', command=lambda: guarded(lambda: registration(True))).pack(side='left')
     ttk.Label(frame, textvariable=status, wraplength=700).grid(row=7, column=0, columnspan=3, sticky='ew', pady=16)
-    ttk.Label(frame, text='PoC: sem senhas, chaves privadas ou comandos recebidos do navegador.', wraplength=700).grid(row=8, column=0, columnspan=3, sticky='ew')
+    ttk.Label(frame, text='PoC local: navegador aceita somente demos; senha sintética apenas no formulário de laboratório.', wraplength=700).grid(row=8, column=0, columnspan=3, sticky='ew')
     frame.bind('<Configure>', lambda event: [child.configure(wraplength=max(300, event.width-40))
         for child in frame.winfo_children() if isinstance(child, ttk.Label) and str(child.cget('wraplength')) not in ('0', '')])
 

@@ -148,3 +148,9 @@ A arquitetura da integração futura e as limitações de autenticação estão 
 [docs/launcher-windows.md](../docs/launcher-windows.md). TER-13 permanece aberta
 até testes reais no Windows; a integração com o catálogo depende da homologação
 da TER-12. Não há alteração de API, banco, migrations, Compose ou workflows nesta PoC.
+
+## Teste de senha sintética
+
+Use o botão **SSH com senha sintética…**. Consulte
+[Windows Server 2019 e matriz de laboratório](../docs/launcher-putty-lab.md).
+Não há integração de credenciais com o painel nesta etapa.

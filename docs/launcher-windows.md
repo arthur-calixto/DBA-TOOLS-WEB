@@ -26,7 +26,7 @@ porque `Popen` devolveu um PID.
 
 | Ferramenta | Suporte documentado | Decisão |
 |---|---|---|
-| PuTTY | Host/porta, `-l`, `-i`, Pageant, `-pw`, `-pwfile` | PoC sem username/senha/chave. `-pw` expõe senha em argv; `-pwfile` troca o risco por arquivo de senha e não será usado |
+| PuTTY | Host/porta, `-l`, `-i`, Pageant, `-pw`, `-pwfile` | PoC sem username/senha/chave. `-pw` expõe senha em argv; `-pwfile` admite named pipe local sem arquivo de senha; ver etapa de laboratório abaixo |
 | WinSCP GUI | Session URL, `/username`, `/password`, `/privatekey`, `/passphrase`, `/passwordsfromfiles`, agente | URL sem credenciais na PoC; `/ini=nul`. Nenhum segredo em argv ou arquivo temporário |
 | WinSCP scripting/.NET | Sessões e transferências automatizadas com opções próprias | Não equivale a entregar uma sessão autenticada à janela GUI existente; não é substituto transparente para a PoC |
 | Chaves SSH | PuTTY/WinSCP podem utilizar arquivo local/agent conforme versão/formato | Avaliar Pageant/chaves locais protegidas na etapa seguinte; nunca exportar chave privada em URL/argv. Passphrase digitada no agente/ferramenta |
@@ -125,3 +125,11 @@ homologada antes dessa infraestrutura, sem qualquer segredo remoto.
 
 Os requisitos de segurança acima são decisões do projeto, não uma afirmação de
 que as ferramentas oferecem um canal de senha/IPC seguro já integrado.
+
+## Atualização TER-13: senha sintética local
+
+A PoC agora inclui [teste local PuTTY por named pipe](launcher-putty-lab.md).
+Essa etapa não implementa resgate de credenciais do backend. A proposta de
+autenticação manual na integração futura foi substituída pelo requisito de senha
+automática; o canal confiável de resgate será tratado separadamente. HTTP atual
+do painel permanece inalterado.

@@ -14,7 +14,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Falha ao instalar dependências de build.' }
     Push-Location $repo
     try {
-        & $python -m unittest discover -s tests -p test_launcher.py -v
+        & $python -m unittest discover -s tests -p "test_launcher*.py" -v
         if ($LASTEXITCODE -ne 0) { throw 'Testes do Launcher falharam; build interrompido.' }
         & $python -m PyInstaller --noconfirm --clean --onedir --windowed `
             --name DBA-TOOLS-Launcher --paths $repo `
